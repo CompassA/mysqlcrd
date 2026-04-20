@@ -1,4 +1,8 @@
 /*
+ * @Author: Tomato
+ * @Date: 2026-03-30 00:38:27
+ */
+/*
 Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,6 +21,7 @@ limitations under the License.
 package v1
 
 import (
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -30,9 +35,43 @@ type MySQLSpec struct {
 	// The following markers will use OpenAPI v3 schema to validate the value
 	// More info: https://book.kubebuilder.io/reference/markers/crd-validation.html
 
-	// foo is an example field of MySQL. Edit mysql_types.go to remove/update
+	// 主节点配置
+	// +required
+	Master *MasterSpec `json:"master"`
+
+	// cpu资源限制, 主从节点共享相同的配置
+	// +required
+	Cpu *resource.Quantity `json:"cpu"`
+
+	// 内存资源限制, 主从节点共享相同的配置
+	// +required
+	Memory *resource.Quantity `json:"memory"`
+
+	// 挂载的磁盘容量, 主从节点共享相同的配置
+	// +required
+	Storage *resource.Quantity `json:"storage"`
+
+	// 存储插件配置, 不配置时为standard
 	// +optional
-	Foo *string `json:"foo,omitempty"`
+	StorageClassName *string `json:"storageClassName,omitempty"`
+
+	// 从节点配置
+	// +optional
+	Replica *ReplicaSpec `json:"replica,omitempty"`
+}
+
+type MasterSpec struct {
+	// mysql root密码
+	// +required
+	RootPassword *string `json:"rootPassword"`
+}
+
+type ReplicaSpec struct {
+	// 从节点数量
+	// +required
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=100
+	Size *int32 `json:"size"`
 }
 
 // MySQLStatus defines the observed state of MySQL.
