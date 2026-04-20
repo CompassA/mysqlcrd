@@ -1,4 +1,8 @@
 /*
+ * @Author: Tomato
+ * @Date: 2026-03-30 00:38:27
+ */
+/*
 Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,12 +29,15 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	tomatov1 "github.com/mysqlcrd/api/v1"
+	tomatopipe "github.com/mysqlcrd/internal/pipeline"
 )
 
 // MySQLReconciler reconciles a MySQL object
 type MySQLReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
+
+	Pipelines []tomatopipe.OperatorStage
 }
 
 // +kubebuilder:rbac:groups=tomato.github.com,resources=mysqls,verbs=get;list;watch;create;update;patch;delete
@@ -47,10 +54,26 @@ type MySQLReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.23.3/pkg/reconcile
 func (r *MySQLReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = logf.FromContext(ctx)
+	logger := logf.FromContext(ctx)
 
-	// TODO(user): your logic here
+	// 执行具体逻辑
+	for _, stage := range r.Pipelines {
+		// stage返回了err时, 处理err, 流程中止
+		// stage返回了result时, 直接将result作为本次Reconcile的结果, 流程中止
+		// stage什么都没返回时, 继续执行
+		result, err := stage.Process(ctx, &req)
+		if err != nil {
+			logger.Error(err, "operate stage failed", "stage", stage.Name())
+			return *result, err
+		}
+		if result != nil {
+			return *result, nil
+		}
+	}
 
+	// todo 记录status
+
+	// 返回
 	return ctrl.Result{}, nil
 }
 
