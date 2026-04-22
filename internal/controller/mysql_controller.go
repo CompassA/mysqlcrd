@@ -28,8 +28,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
+	"github.com/go-logr/logr"
 	tomatov1 "github.com/mysqlcrd/api/v1"
-	tomatopipe "github.com/mysqlcrd/internal/pipeline"
+	v1 "github.com/mysqlcrd/api/v1"
 )
 
 // MySQLReconciler reconciles a MySQL object
@@ -37,7 +38,24 @@ type MySQLReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 
-	Pipelines []tomatopipe.OperatorStage
+	Pipelines []OperatorStage
+}
+
+// 执行阶段
+type OperatorStage interface {
+	// 执行Reconcile
+	Process(param *StageParam) (*ctrl.Result, error)
+
+	// 阶段名称
+	Name() string
+}
+
+type StageParam struct {
+	R      *MySQLReconciler
+	Ctx    *context.Context
+	Req    *ctrl.Request
+	Cr     *v1.MySQL
+	Logger *logr.Logger
 }
 
 // +kubebuilder:rbac:groups=tomato.github.com,resources=mysqls,verbs=get;list;watch;create;update;patch;delete
@@ -56,12 +74,25 @@ type MySQLReconciler struct {
 func (r *MySQLReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := logf.FromContext(ctx)
 
+	// 获取CR
+	cr := &tomatov1.MySQL{}
+	if err := r.Get(ctx, req.NamespacedName, cr); err != nil {
+		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
+
+	p := &StageParam{
+		R:      r,
+		Ctx:    &ctx,
+		Req:    &req,
+		Cr:     cr,
+		Logger: &logger,
+	}
 	// 执行具体逻辑
 	for _, stage := range r.Pipelines {
 		// stage返回了err时, 处理err, 流程中止
 		// stage返回了result时, 直接将result作为本次Reconcile的结果, 流程中止
 		// stage什么都没返回时, 继续执行
-		result, err := stage.Process(ctx, &req)
+		result, err := stage.Process(p)
 		if err != nil {
 			logger.Error(err, "operate stage failed", "stage", stage.Name())
 			return *result, err

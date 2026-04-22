@@ -64,6 +64,14 @@ type MasterSpec struct {
 	// mysql root密码
 	// +required
 	RootPassword *string `json:"rootPassword"`
+
+	// mysql 主从复制账号
+	// +required
+	ReplicaAccount *string `json:"replicaAccount"`
+
+	// mysql 主从复制密码
+	// +required
+	ReplicaPassword *string `json:"replicaPassword"`
 }
 
 type ReplicaSpec struct {

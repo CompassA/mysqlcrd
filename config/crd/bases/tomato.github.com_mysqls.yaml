@@ -49,10 +49,18 @@ spec:
               master:
                 description: 主节点配置
                 properties:
+                  replicaAccount:
+                    description: mysql 主从复制账号
+                    type: string
+                  replicaPassword:
+                    description: mysql 主从复制密码
+                    type: string
                   rootPassword:
                     description: mysql root密码
                     type: string
                 required:
+                - replicaAccount
+                - replicaPassword
                 - rootPassword
                 type: object
               memory:
