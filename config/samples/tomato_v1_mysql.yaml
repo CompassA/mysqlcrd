@@ -5,5 +5,21 @@ metadata:
     app.kubernetes.io/name: mysqlcrd
     app.kubernetes.io/managed-by: kustomize
   name: mysql-sample
+  namespace: tomato
 spec:
-  # TODO(user): Add fields here
+  #主库配置
+  master:
+    rootPassword: root
+    replicaAccount: master0
+    replicaPassword: Master@
+  #从库配置
+  replica:
+    # 从库数量
+    size: 2
+  # 磁盘配置
+  storageClassName: standard
+  storage: 2Gi
+  # cpu配置
+  cpu: 100m
+  # 内存配置
+  memory: 128Mi

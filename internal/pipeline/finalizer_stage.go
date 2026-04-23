@@ -21,7 +21,7 @@ func (s *FinalizerStage) Process(p *controller.StageParam) (*ctrl.Result, error)
 	if p.Cr.DeletionTimestamp.IsZero() {
 		if !controllerutil.ContainsFinalizer(p.Cr, finalizer) {
 			controllerutil.AddFinalizer(p.Cr, finalizer)
-			if err := p.R.Update(*p.Ctx, p.Cr); err != nil {
+			if err := p.Controller.Update(p.Ctx, p.Cr); err != nil {
 				return &reconcile.Result{}, err
 			}
 		}

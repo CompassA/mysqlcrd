@@ -1,5 +1,32 @@
 # mysqlcrd
-// TODO(user): Add simple overview of use/purpose
+```yaml
+apiVersion: tomato.github.com/v1
+kind: MySQL
+metadata:
+  labels:
+    app.kubernetes.io/name: mysqlcrd
+    app.kubernetes.io/managed-by: kustomize
+  name: mysql-sample
+  namespace: tomato
+spec:
+  #主库配置
+  master:
+    rootPassword: root
+    replicaAccount: master0
+    replicaPassword: Master@
+  #从库配置
+  replica:
+    # 从库数量
+    size: 2
+  # 磁盘配置
+  storageClassName: standard
+  storage: 2Gi
+  # cpu配置
+  cpu: 100m
+  # 内存配置
+  memory: 128Mi
+
+```
 
 ## Description
 // TODO(user): An in-depth paragraph about your project and overview of use
@@ -17,6 +44,13 @@
 
 ```sh
 make docker-build docker-push IMG=<some-registry>/mysqlcrd:tag
+## 安装了podman时, Makefile中修复配置: CONTAINER_TOOL ?= podman
+## make docker-build IMG=tomato/mysqlcrd:0.0.1
+
+# 将镜像打包上传到kind中
+## podman save -o tomato-mysqlcrd.tar tomato/mysqlcrd:0.0.1
+## kind load image-archive tomato-mysqlcrd.tar --name=local-cluster
+## podman exec -it local-cluster-control-plane crictl images
 ```
 
 **NOTE:** This image ought to be published in the personal registry you specified.
@@ -27,12 +61,18 @@ Make sure you have the proper permission to the registry if the above commands d
 
 ```sh
 make install
+
+## 去集群中执行CR创建, 检查是否生效
+## k apply -f config/samples/tomato_v1_mysql.yaml
+## k get MySQL -n tomato -o yaml
 ```
 
 **Deploy the Manager to the cluster with the image specified by `IMG`:**
 
 ```sh
 make deploy IMG=<some-registry>/mysqlcrd:tag
+
+## make deploy IMG=tomato/mysqlcrd:0.0.1
 ```
 
 > **NOTE**: If you encounter RBAC errors, you may need to grant yourself cluster-admin
@@ -43,6 +83,9 @@ You can apply the samples (examples) from the config/sample:
 
 ```sh
 kubectl apply -k config/samples/
+
+# kubectl describe MySQL mysql-sample -n tomato
+# kubectl get MySQL -n tomato
 ```
 
 >**NOTE**: Ensure that the samples has default values to test it out.

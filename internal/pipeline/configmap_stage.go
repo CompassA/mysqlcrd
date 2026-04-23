@@ -12,10 +12,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/mysqlcrd/internal/controller"
+	"github.com/mysqlcrd/pkg/utils"
 	corev1 "k8s.io/api/core/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 type ConfigMapStage struct {
@@ -46,29 +46,34 @@ func NewConfinMapStage(dir string) (*ConfigMapStage, error) {
 }
 
 // 执行Reconcile, 创建
-func (s *ConfigMapStage) Process(p *controller.StageParam) (*ctrl.Result, error) {
-	// create configmap
-	cm := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      p.Cr.Name + "-mysql-configmap",
-			Namespace: p.Cr.Namespace,
-		},
-	}
-	cmop, err := controllerutil.CreateOrUpdate(*p.Ctx, p.R.Client, cm, func() error {
-		if err := controllerutil.SetControllerReference(p.Cr, cm, p.R.Scheme); err != nil {
-			return err
+func (s *ConfigMapStage) Process(p *controller.StageParam) (res *ctrl.Result, err error) {
+	defer func() {
+		if err != nil {
+			if setErr := p.Controller.SetCondition(p.Ctx, p.Cr, utils.ConfigReady, metav1.ConditionFalse, "Create failed", err.Error()); setErr != nil {
+				p.Logger.Error(setErr, "set condition failed", "stage", s.Name())
+			}
 		}
+	}()
 
-		cm.Data = s.Files
-
-		return nil
-	})
-	if err != nil {
-		return &reconcile.Result{}, err
+	// create configmap
+	if err := s.reconcileConfigmap(p); err != nil {
+		return nil, err
 	}
-	p.Logger.Info("ConfigMap reconciled", "operation", cmop)
 
 	// create secret
+	if err := s.reconcileSecret(p); err != nil {
+		return nil, err
+	}
+
+	// 标记config创建完成
+	if err := p.Controller.SetCondition(p.Ctx, p.Cr, utils.ConfigReady, metav1.ConditionTrue, "Ready", ""); err != nil {
+		p.Logger.Error(err, "set condition failed", "stage", s.Name())
+	}
+
+	return nil, nil
+}
+
+func (s *ConfigMapStage) reconcileSecret(p *controller.StageParam) (err error) {
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      p.Cr.Name + "-mysql-secret",
@@ -76,8 +81,8 @@ func (s *ConfigMapStage) Process(p *controller.StageParam) (*ctrl.Result, error)
 		},
 	}
 
-	secretop, err := controllerutil.CreateOrUpdate(*p.Ctx, p.R.Client, secret, func() error {
-		if err := controllerutil.SetControllerReference(p.Cr, secret, p.R.Scheme); err != nil {
+	secretop, err := controllerutil.CreateOrUpdate(p.Ctx, p.Controller.Client, secret, func() error {
+		if err := controllerutil.SetControllerReference(p.Cr, secret, p.Controller.Scheme); err != nil {
 			return err
 		}
 
@@ -92,11 +97,36 @@ func (s *ConfigMapStage) Process(p *controller.StageParam) (*ctrl.Result, error)
 		return nil
 	})
 	if err != nil {
-		return &reconcile.Result{}, err
+		return err
 	}
-	p.Logger.Info("Secret reconciled", "operation", secretop)
 
-	return nil, nil
+	p.Logger.Info("Secret reconciled", "operation", secretop)
+	return nil
+}
+
+func (s *ConfigMapStage) reconcileConfigmap(p *controller.StageParam) (err error) {
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      p.Cr.Name + "-mysql-configmap",
+			Namespace: p.Cr.Namespace,
+		},
+	}
+
+	cmop, err := controllerutil.CreateOrUpdate(p.Ctx, p.Controller.Client, cm, func() error {
+		if err := controllerutil.SetControllerReference(p.Cr, cm, p.Controller.Scheme); err != nil {
+			return err
+		}
+
+		cm.Data = s.Files
+
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	p.Logger.Info("ConfigMap reconciled", "operation", cmop)
+
+	return nil
 }
 
 // 阶段名称

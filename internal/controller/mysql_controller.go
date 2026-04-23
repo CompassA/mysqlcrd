@@ -23,6 +23,7 @@ package controller
 import (
 	"context"
 
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -31,13 +32,14 @@ import (
 	"github.com/go-logr/logr"
 	tomatov1 "github.com/mysqlcrd/api/v1"
 	v1 "github.com/mysqlcrd/api/v1"
+	"github.com/mysqlcrd/pkg/utils"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // MySQLReconciler reconciles a MySQL object
 type MySQLReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
-
+	Scheme    *runtime.Scheme
 	Pipelines []OperatorStage
 }
 
@@ -51,11 +53,11 @@ type OperatorStage interface {
 }
 
 type StageParam struct {
-	R      *MySQLReconciler
-	Ctx    *context.Context
-	Req    *ctrl.Request
-	Cr     *v1.MySQL
-	Logger *logr.Logger
+	Controller *MySQLReconciler
+	Ctx        context.Context
+	Req        *ctrl.Request
+	Cr         *v1.MySQL
+	Logger     *logr.Logger
 }
 
 // +kubebuilder:rbac:groups=tomato.github.com,resources=mysqls,verbs=get;list;watch;create;update;patch;delete
@@ -71,7 +73,7 @@ type StageParam struct {
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.23.3/pkg/reconcile
-func (r *MySQLReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *MySQLReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, err error) {
 	logger := logf.FromContext(ctx)
 
 	// 获取CR
@@ -80,14 +82,51 @@ func (r *MySQLReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	p := &StageParam{
-		R:      r,
-		Ctx:    &ctx,
-		Req:    &req,
-		Cr:     cr,
-		Logger: &logger,
+	// 设置状态
+	if err := r.SetCondition(ctx, cr, utils.ReconcileProcessing, metav1.ConditionTrue, "Reconciling", ""); err != nil {
+		return ctrl.Result{}, err
 	}
+	defer func() {
+		// 出现错误
+		if err != nil {
+			if setErr := r.SetCondition(ctx, cr, utils.ReconcileProcessing, metav1.ConditionTrue, "error", err.Error()); setErr != nil {
+				logger.Error(setErr, "set condition failed")
+			}
+			if setErr := r.SetCondition(ctx, cr, utils.ConfigReady, metav1.ConditionFalse, "error", err.Error()); setErr != nil {
+				logger.Error(setErr, "set condition failed")
+			}
+			return
+		}
+
+		// 等待资源就绪
+		if result.RequeueAfter > 0 {
+			if setErr := r.SetCondition(ctx, cr, utils.ReconcileProcessing, metav1.ConditionTrue, "Retrying", ""); setErr != nil {
+				logger.Error(setErr, "set condition failed")
+			}
+
+			if setErr := r.SetCondition(ctx, cr, utils.ConfigReady, metav1.ConditionFalse, "Retrying", ""); setErr != nil {
+				logger.Error(setErr, "set condition failed")
+			}
+			return
+		}
+
+		// Reconcile完成
+		if setErr := r.SetCondition(ctx, cr, utils.ReconcileProcessing, metav1.ConditionFalse, "succeed", ""); setErr != nil {
+			logger.Error(setErr, "set condition failed")
+		}
+		if setErr := r.SetCondition(ctx, cr, utils.ConfigReady, metav1.ConditionTrue, "Ready", ""); setErr != nil {
+			logger.Error(setErr, "set condition failed")
+		}
+	}()
+
 	// 执行具体逻辑
+	p := &StageParam{
+		Controller: r,
+		Ctx:        ctx,
+		Req:        &req,
+		Cr:         cr,
+		Logger:     &logger,
+	}
 	for _, stage := range r.Pipelines {
 		// stage返回了err时, 处理err, 流程中止
 		// stage返回了result时, 直接将result作为本次Reconcile的结果, 流程中止
@@ -101,10 +140,6 @@ func (r *MySQLReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 			return *result, nil
 		}
 	}
-
-	// todo 记录status
-
-	// 返回
 	return ctrl.Result{}, nil
 }
 
@@ -114,4 +149,25 @@ func (r *MySQLReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&tomatov1.MySQL{}).
 		Named("mysql").
 		Complete(r)
+}
+
+// 设置Condition
+func (r *MySQLReconciler) SetCondition(ctx context.Context, cr *tomatov1.MySQL, condType string, status metav1.ConditionStatus, reason string, message string) error {
+	newCond := metav1.Condition{
+		Type:               condType,
+		Status:             status,
+		Reason:             reason,
+		Message:            message,
+		LastTransitionTime: metav1.Now(),
+		ObservedGeneration: cr.Generation,
+	}
+
+	cur := meta.FindStatusCondition(cr.Status.Conditions, condType)
+	if cur != nil && cur.Status == status && cur.Reason == reason && cur.Message == message {
+		return nil
+	}
+
+	meta.SetStatusCondition(&cr.Status.Conditions, newCond)
+
+	return r.Status().Update(ctx, cr)
 }
