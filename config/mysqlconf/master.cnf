@@ -1,0 +1,26 @@
+[mysqld]
+innodb_file_per_table=1               # 一张表一个文件
+innodb_buffer_pool_size=256M          # 内存池大小
+#innodb_log_files_in_group=4          # redolog文件数, mysql8.0不推荐使用
+#innodb_log_file_size=1G              # redolog单个文件大小,mysql8.0不推荐使用
+innodb_redo_log_capacity=4294967296   # redolog大小
+innodb_flush_log_at_trx_commit=1      # redolog刷盘策略
+max_connections=10000                 # 最大连接数
+default-time_zone='+8:00'             # 时区
+lower_case_table_names=1
+
+######################### binlog配置 ################################
+server-id=1                           # 服务ID
+gtid_mode=on                          # 开启G-TID
+enforce-gtid-consistency=true         # 强制GTID一致性, 防止非GTID事务的复制
+log_replica_updates=1                 # 确保从服务器也会记录二进制日志
+
+log-bin=mysql-bin                     # 启用二进制日志，用于主从复制
+# binlog_format=ROW                   # BINLOG格式 ROW, mysql8.0后的版本默认为ROW, 不需要配置
+
+binlog_cache_size=1M                  # 设置二进制日志的缓存大小，影响二进制日志的写入性能
+max_binlog_size=300M                  # 设置二进制日志的最大大小，当二进制日志达到这个大小后会自动滚动并创建新的日志文件
+binlog_expire_logs_seconds = 604800   # binlog过期时间 7天
+
+[client]
+# socket=/var/run/mysqld/mysqld.sock

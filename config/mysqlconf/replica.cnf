@@ -1,0 +1,5 @@
+[mysqld]
+    gtid_mode=ON
+    enforce-gtid-consistency=true
+    relay_log_recovery=ON
+    lower_case_table_names=1

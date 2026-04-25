@@ -24,18 +24,10 @@ type ConfigMapStage struct {
 
 // 加载配置文件
 func NewConfinMapStage(dir string) (*ConfigMapStage, error) {
-	filenamearr := [...]string{
-		"create_replication_account_procedure.sql",
-		"master_sidecar.sh",
-		"replica_init.sh",
-		"replica_sidecar.sh",
-		"start_replication_procedure.sql",
-	}
-
 	stage := &ConfigMapStage{
 		Files: map[string]string{},
 	}
-	for _, name := range filenamearr {
+	for _, name := range utils.FileNameArr {
 		content, err := os.ReadFile(dir + name)
 		if err != nil {
 			return nil, fmt.Errorf("read file from %s%s failed, %w", dir, name, err)
@@ -76,7 +68,7 @@ func (s *ConfigMapStage) Process(p *controller.StageParam) (res *ctrl.Result, er
 func (s *ConfigMapStage) reconcileSecret(p *controller.StageParam) (err error) {
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      p.Cr.Name + "-mysql-secret",
+			Name:      utils.ResourceName(p.Cr.Name, utils.Secret),
 			Namespace: p.Cr.Namespace,
 		},
 	}
@@ -89,9 +81,9 @@ func (s *ConfigMapStage) reconcileSecret(p *controller.StageParam) (err error) {
 		secret.Type = "Opaque"
 
 		secret.Data = map[string][]byte{
-			"MYSQL_ROOT_PASSWORD":        []byte(base64.StdEncoding.EncodeToString([]byte(*p.Cr.Spec.Master.RootPassword))),
-			"MYSQL_MASTER_DUMP_USER":     []byte(base64.StdEncoding.EncodeToString([]byte(*p.Cr.Spec.Master.ReplicaAccount))),
-			"MYSQL_MASTER_DUMP_PASSWORD": []byte(base64.StdEncoding.EncodeToString([]byte(*p.Cr.Spec.Master.ReplicaPassword))),
+			utils.EnvMysqlRootPassword:       []byte(base64.StdEncoding.EncodeToString([]byte(*p.Cr.Spec.Master.RootPassword))),
+			utils.EnvMysqlMasterDumpUser:     []byte(base64.StdEncoding.EncodeToString([]byte(*p.Cr.Spec.Master.ReplicaAccount))),
+			utils.EnvMysqlMasterDumpPassword: []byte(base64.StdEncoding.EncodeToString([]byte(*p.Cr.Spec.Master.ReplicaPassword))),
 		}
 
 		return nil
@@ -107,7 +99,7 @@ func (s *ConfigMapStage) reconcileSecret(p *controller.StageParam) (err error) {
 func (s *ConfigMapStage) reconcileConfigmap(p *controller.StageParam) (err error) {
 	cm := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      p.Cr.Name + "-mysql-configmap",
+			Name:      utils.ResourceName(p.Cr.Name, utils.ConfigMap),
 			Namespace: p.Cr.Namespace,
 		},
 	}

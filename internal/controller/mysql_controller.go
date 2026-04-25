@@ -46,7 +46,7 @@ type MySQLReconciler struct {
 // 执行阶段
 type OperatorStage interface {
 	// 执行Reconcile
-	Process(param *StageParam) (*ctrl.Result, error)
+	Process(p *StageParam) (*ctrl.Result, error)
 
 	// 阶段名称
 	Name() string
