@@ -29,7 +29,11 @@ func (s *FinalizerStage) Process(p *controller.StageParam) (*ctrl.Result, error)
 	}
 
 	// fixme TOMATO todo 删除CRD
-	return nil, nil
+	controllerutil.RemoveFinalizer(p.Cr, finalizer)
+	if err := p.Controller.Update(p.Ctx, p.Cr); err != nil {
+		return nil, err
+	}
+	return &ctrl.Result{}, nil
 }
 
 // 阶段名称

@@ -72,7 +72,7 @@ make install
 ```sh
 make deploy IMG=<some-registry>/mysqlcrd:tag
 
-## make deploy IMG=tomato/mysqlcrd:0.0.1
+## make deploy IMG=localhost/tomato/mysqlcrd:0.0.1
 ```
 
 > **NOTE**: If you encounter RBAC errors, you may need to grant yourself cluster-admin

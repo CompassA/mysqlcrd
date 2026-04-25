@@ -57,7 +57,7 @@ type StageParam struct {
 	Logger     *logr.Logger
 }
 
-// +kubebuilder:rbac:groups=tomato.github.com,resources=mysqls,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=tomato.github.com,resources=mysqls;pods;services;configmaps;secrets;deployments;statefulsets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=tomato.github.com,resources=mysqls/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=tomato.github.com,resources=mysqls/finalizers,verbs=update
 
