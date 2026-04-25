@@ -37,6 +37,7 @@ import (
 
 	tomatov1 "github.com/mysqlcrd/api/v1"
 	"github.com/mysqlcrd/internal/controller"
+	"github.com/mysqlcrd/internal/pipeline"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -178,9 +179,21 @@ func main() {
 		os.Exit(1)
 	}
 
+	cmstage, err := pipeline.NewConfinMapStage("config/mysqlconf/")
+	if err != nil {
+		setupLog.Error(err, "Failed to load mysql conf file", "controller", "MySQL")
+		os.Exit(1)
+	}
+	pipelines := []controller.OperatorStage{
+		&pipeline.FinalizerStage{},
+		cmstage,
+		&pipeline.MasterCreateStage{},
+		&pipeline.ReplicaCreateStage{},
+	}
 	if err := (&controller.MySQLReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:    mgr.GetClient(),
+		Scheme:    mgr.GetScheme(),
+		Pipelines: pipelines,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "MySQL")
 		os.Exit(1)

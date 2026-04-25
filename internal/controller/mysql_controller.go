@@ -1,8 +1,4 @@
 /*
- * @Author: Tomato
- * @Date: 2026-03-30 00:38:27
- */
-/*
 Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -33,6 +29,7 @@ import (
 	tomatov1 "github.com/mysqlcrd/api/v1"
 	v1 "github.com/mysqlcrd/api/v1"
 	"github.com/mysqlcrd/pkg/utils"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 

@@ -81,23 +81,3 @@ func JobReady(job *batchv1.Job) (bool, string) {
 	}
 	return false, "job still running"
 }
-
-func EnvSecretRef(secretName string, envKeys []string) []corev1.EnvVar {
-	res := make([]corev1.EnvVar, len(envKeys))
-
-	for i, envKey := range envKeys {
-		res[i] = corev1.EnvVar{
-			Name: envKey,
-			ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: secretName,
-					},
-					Key: envKey,
-				},
-			},
-		}
-	}
-
-	return res
-}
