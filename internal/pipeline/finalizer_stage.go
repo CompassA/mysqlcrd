@@ -5,7 +5,7 @@
 package pipeline
 
 import (
-	"github.com/mysqlcrd/internal/controller"
+	tomatoctrl "github.com/mysqlcrd/internal/controller"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -16,7 +16,7 @@ const finalizer string = "delete-pvc-finalizer-mark"
 type FinalizerStage struct{}
 
 // 资源被删除后, 处理关联PVC的删除
-func (s *FinalizerStage) Process(p *controller.StageParam) (*ctrl.Result, error) {
+func (s *FinalizerStage) Process(p *tomatoctrl.StageParam) (*ctrl.Result, error) {
 	// 没被删除时, 检查删除标记是否添加
 	if p.Cr.DeletionTimestamp.IsZero() {
 		if !controllerutil.ContainsFinalizer(p.Cr, finalizer) {

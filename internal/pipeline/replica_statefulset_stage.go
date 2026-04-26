@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/mysqlcrd/internal/controller"
+	myctrl "github.com/mysqlcrd/internal/controller"
 	"github.com/mysqlcrd/pkg/utils"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -23,7 +24,7 @@ import (
 type ReplicaCreateStage struct{}
 
 // 执行Reconcile
-func (s *ReplicaCreateStage) Process(p *controller.StageParam) (res *ctrl.Result, err error) {
+func (s *ReplicaCreateStage) Process(p *myctrl.StageParam) (res *ctrl.Result, err error) {
 	// 没配置从库
 	if p.Cr.Spec.Replica == nil {
 		p.Logger.Info("no replica config, skip this stage", "stage", s.Name())
@@ -34,18 +35,18 @@ func (s *ReplicaCreateStage) Process(p *controller.StageParam) (res *ctrl.Result
 	defer func() {
 		// 记录异常
 		if err != nil {
-			if setErr := p.Controller.SetCondition(p.Ctx, p.Cr, utils.ReplicaStsReady, metav1.ConditionFalse, "create replica failed", err.Error()); setErr != nil {
+			if setErr := p.Controller.SetCondition(p.Ctx, p.Cr, myctrl.ReplicaStsReady, metav1.ConditionFalse, "create replica failed", err.Error()); setErr != nil {
 				p.Logger.Error(setErr, "set condition failed", "stage", s.Name())
 			}
 			return
 		}
 		// 什么都没返回代表当前阶段结束
 		if res == nil {
-			if setErr := p.Controller.SetCondition(p.Ctx, p.Cr, utils.ReplicaStsReady, metav1.ConditionTrue, "create replica failed", err.Error()); setErr != nil {
+			if setErr := p.Controller.SetCondition(p.Ctx, p.Cr, myctrl.ReplicaStsReady, metav1.ConditionTrue, "create replica failed", err.Error()); setErr != nil {
 				p.Logger.Error(setErr, "set condition failed", "stage", s.Name())
 			}
 		} else {
-			if setErr := p.Controller.SetCondition(p.Ctx, p.Cr, utils.ReplicaStsReady, metav1.ConditionFalse, "waiting for replica-creation to be completed", ""); setErr != nil {
+			if setErr := p.Controller.SetCondition(p.Ctx, p.Cr, myctrl.ReplicaStsReady, metav1.ConditionFalse, "waiting for replica-creation to be completed", ""); setErr != nil {
 				p.Logger.Error(setErr, "set condition failed", "stage", s.Name())
 			}
 		}
@@ -53,8 +54,8 @@ func (s *ReplicaCreateStage) Process(p *controller.StageParam) (res *ctrl.Result
 
 	// 从库POD标签
 	label := map[string]string{
-		utils.AppLabel:       utils.ResourceName(p.Cr.Name, utils.ReplicaPod),
-		utils.MasterDNSLabel: utils.MasterServiceDNS(p.Cr.Name, p.Cr.Namespace),
+		myctrl.AppLabel:       myctrl.ResourceName(p.Cr.Name, myctrl.ReplicaPod),
+		myctrl.MasterDNSLabel: myctrl.MasterServiceDNS(p.Cr.Name, p.Cr.Namespace),
 	}
 
 	// 创建从库 headless service
@@ -78,7 +79,7 @@ func (s *ReplicaCreateStage) Process(p *controller.StageParam) (res *ctrl.Result
 func (s *ReplicaCreateStage) reconcileService(p *controller.StageParam, label map[string]string) error {
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      utils.ResourceName(p.Cr.Name, utils.ReplicaService),
+			Name:      myctrl.ResourceName(p.Cr.Name, myctrl.ReplicaService),
 			Namespace: p.Cr.Namespace,
 		},
 	}
@@ -95,10 +96,10 @@ func (s *ReplicaCreateStage) reconcileService(p *controller.StageParam, label ma
 				{
 					Name:     fmt.Sprintf("%s-mysql-replica-svc-port", p.Cr.Name),
 					Protocol: corev1.ProtocolTCP,
-					Port:     utils.MysqlServicePort,
+					Port:     myctrl.MysqlServicePort,
 					TargetPort: intstr.IntOrString{
 						Type:   intstr.String,
-						StrVal: utils.MysqlPodPortName,
+						StrVal: myctrl.MysqlPodPortName,
 					},
 				},
 			},
@@ -117,7 +118,7 @@ func (s *ReplicaCreateStage) reconcileService(p *controller.StageParam, label ma
 func (s *ReplicaCreateStage) reconcileStatefulSet(p *controller.StageParam, label map[string]string) error {
 	sts := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      utils.ResourceName(p.Cr.Name, utils.ReplicaStatefulSet),
+			Name:      myctrl.ResourceName(p.Cr.Name, myctrl.ReplicaStatefulSet),
 			Namespace: p.Cr.Namespace,
 		},
 	}
@@ -133,23 +134,19 @@ func (s *ReplicaCreateStage) reconcileStatefulSet(p *controller.StageParam, labe
 		mem := p.Cr.Spec.Memory
 		scn := p.Cr.Spec.StorageClassName
 
-		pvcname, pvc := utils.CreatePVC(crname, scn, storage, utils.ReplicaPVC) // pvc
-		volumns := createReplicaPodVolumns(p)                                   // volumn
-		init := createReplicaInitContainer(p, label, pvcname)                   // 初始化容器
-		mysql := utils.CreateMysqlContainer(crname, cpu, mem, pvcname)          // mysql容器
-		xtrabackup := createReplicaSidecarContainer(p, label, pvcname)          // xtrabackup sidecar容器
+		pvcname, pvc := myctrl.CreatePVC(crname, scn, storage, myctrl.ReplicaPVC) // pvc
+		volumns := createReplicaPodVolumns(p)                                     // volumn
+		init := createReplicaInitContainer(p, label, pvcname)                     // 初始化容器
+		mysql := myctrl.CreateMysqlContainer(crname, cpu, mem, pvcname)           // mysql容器
+		xtrabackup := createReplicaSidecarContainer(p, label, pvcname)            // xtrabackup sidecar容器
 
 		terminationGracePeriodSeconds := int64(60)
 
 		sts.Spec = appsv1.StatefulSetSpec{
-			ServiceName:          utils.ResourceName(crname, utils.ReplicaService), // 绑定headlessservice
-			Replicas:             p.Cr.Spec.Replica.Size,                           // 从库pod数
-			VolumeClaimTemplates: pvc,                                              // PVC
-
-			// POD selector
-			Selector: &metav1.LabelSelector{MatchLabels: label},
-
-			// MysqlPOD
+			ServiceName:          myctrl.ResourceName(crname, myctrl.ReplicaService), // 绑定headlessservice
+			Replicas:             p.Cr.Spec.Replica.Size,                             // 从库pod数
+			VolumeClaimTemplates: pvc,                                                // PVC
+			Selector:             &metav1.LabelSelector{MatchLabels: label},          // POD selector
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{Labels: label},
 				Spec: corev1.PodSpec{
@@ -173,27 +170,27 @@ func (s *ReplicaCreateStage) reconcileStatefulSet(p *controller.StageParam, labe
 func createReplicaPodVolumns(p *controller.StageParam) []corev1.Volume {
 	return []corev1.Volume{
 		{ // 配置数据卷
-			Name: utils.MysqlConfVolumn,
+			Name: myctrl.MysqlConfVolumn,
 			VolumeSource: corev1.VolumeSource{
 				EmptyDir: &corev1.EmptyDirVolumeSource{},
 			},
 		},
 		{ // ConfigMap数据卷
-			Name: utils.MysqlConfigMapVolumn,
+			Name: myctrl.MysqlConfigMapVolumn,
 			VolumeSource: corev1.VolumeSource{
 				ConfigMap: &corev1.ConfigMapVolumeSource{
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: utils.ResourceName(p.Cr.Name, utils.ConfigMap),
+						Name: myctrl.ResourceName(p.Cr.Name, myctrl.ConfigMap),
 					},
 					Items: []corev1.KeyToPath{
 						// 从库配置文件
-						{Key: utils.FileReplicaConf, Path: utils.FileReplicaConf},
+						{Key: myctrl.FileReplicaConf, Path: myctrl.FileReplicaConf},
 						// 从库初始化镜像的脚本
-						{Key: utils.FileReplicaInit, Path: utils.FileReplicaInit},
+						{Key: myctrl.FileReplicaInit, Path: myctrl.FileReplicaInit},
 						// 启动主从复制脚本
-						{Key: utils.FileStartReplicationProcedure, Path: utils.FileStartReplicationProcedure},
+						{Key: myctrl.FileStartReplicationProcedure, Path: myctrl.FileStartReplicationProcedure},
 						// 从库xtrabackup sidecar脚本
-						{Key: utils.FileReplicaSideCar, Path: utils.FileReplicaSideCar},
+						{Key: myctrl.FileReplicaSideCar, Path: myctrl.FileReplicaSideCar},
 					},
 				},
 			},
@@ -203,65 +200,67 @@ func createReplicaPodVolumns(p *controller.StageParam) []corev1.Volume {
 
 func createReplicaInitContainer(p *controller.StageParam, label map[string]string, pvcname string) *corev1.Container {
 	// root密码 主从复制账号密码 主库serviceDNS 从库Service名称
-	env := utils.EnvSecretRef(utils.ResourceName(p.Cr.Name, utils.Secret), []string{utils.EnvMysqlRootPassword})
+	env := myctrl.EnvSecretRef(myctrl.ResourceName(p.Cr.Name, myctrl.Secret), []string{myctrl.EnvMysqlRootPassword})
 	env = append(env, corev1.EnvVar{
-		Name: utils.EnvPodName,
+		Name: myctrl.EnvPodName,
 		ValueFrom: &corev1.EnvVarSource{
 			FieldRef: &corev1.ObjectFieldSelector{
 				FieldPath: "metadata.name",
 			},
 		},
 	}, corev1.EnvVar{
-		Name: utils.EnvPodNamespace,
+		Name: myctrl.EnvPodNamespace,
 		ValueFrom: &corev1.EnvVarSource{
 			FieldRef: &corev1.ObjectFieldSelector{
 				FieldPath: "metadata.namespace",
 			},
 		},
 	}, corev1.EnvVar{
-		Name:  utils.EnvMasterDNS,
-		Value: label[utils.MasterDNSLabel],
+		Name:  myctrl.EnvMasterDNS,
+		Value: label[myctrl.MasterDNSLabel],
 	}, corev1.EnvVar{
-		Name:  utils.EnvReplicaServiceName,
-		Value: utils.ResourceName(p.Cr.Name, utils.ReplicaService),
+		Name:  myctrl.EnvReplicaServiceName,
+		Value: myctrl.ResourceName(p.Cr.Name, myctrl.ReplicaService),
 	})
 
 	return &corev1.Container{
 		Name:  "init-dump",
-		Image: utils.XtrabackupImage,
+		Image: myctrl.XtrabackupImage,
 		VolumeMounts: []corev1.VolumeMount{
 			// mysql配置目录
-			{Name: utils.MysqlConfVolumn, MountPath: utils.MysqlConfPath},
+			{Name: myctrl.MysqlConfVolumn, MountPath: myctrl.MysqlConfPath},
 			// configmap配置文件
-			{Name: utils.MysqlConfigMapVolumn, MountPath: utils.MysqlConfigMapPath},
+			{Name: myctrl.MysqlConfigMapVolumn, MountPath: myctrl.MysqlConfigMapPath},
 			// mysql数据文件
-			{Name: pvcname, MountPath: utils.MysqlDataPath},
+			{Name: pvcname, MountPath: myctrl.MysqlDataPath},
 		},
 		Env: env,
 
 		// 从库初始化脚本
-		Command: []string{"bash", fmt.Sprintf("%s/%s", utils.MysqlConfigMapPath, utils.FileReplicaInit)},
+		Command: []string{"bash", fmt.Sprintf("%s/%s", myctrl.MysqlConfigMapPath, myctrl.FileReplicaInit)},
 	}
 }
 
 func createReplicaSidecarContainer(p *controller.StageParam, label map[string]string, pvcname string) *corev1.Container {
 	// root密码 主从复制账号密码 主库url
-	env := utils.EnvSecretRef(utils.ResourceName(p.Cr.Name, utils.Secret),
-		[]string{utils.EnvMysqlRootPassword, utils.EnvMysqlMasterDumpUser, utils.EnvMysqlMasterDumpPassword})
+	env := myctrl.EnvSecretRef(myctrl.ResourceName(p.Cr.Name, myctrl.Secret),
+		[]string{myctrl.EnvMysqlRootPassword, myctrl.EnvMysqlMasterDumpUser, myctrl.EnvMysqlMasterDumpPassword})
 	env = append(env, corev1.EnvVar{
-		Name:  utils.EnvMasterDNS,
-		Value: label[utils.MasterDNSLabel],
+		Name:  myctrl.EnvMasterDNS,
+		Value: label[myctrl.MasterDNSLabel],
 	})
 
-	cpu := resource.MustParse(utils.XtrabackupCpu)
-	mem := resource.MustParse(utils.XtrabackupMem)
+	cpu := resource.MustParse(myctrl.XtrabackupCpu)
+	mem := resource.MustParse(myctrl.XtrabackupMem)
+
+	sidecarsh := fmt.Sprintf("%s/%s", myctrl.MysqlConfigMapPath, myctrl.FileReplicaSideCar)
 
 	return &corev1.Container{
 		Name:  "xtrabackup",
-		Image: utils.XtrabackupImage,
+		Image: myctrl.XtrabackupImage,
 		Env:   env,
 		Ports: []corev1.ContainerPort{
-			{Name: "xtrabackup", ContainerPort: utils.XtrabackupPort},
+			{Name: "xtrabackup", ContainerPort: myctrl.XtrabackupPort},
 		},
 
 		// xtrabackup 占用的资源
@@ -278,13 +277,13 @@ func createReplicaSidecarContainer(p *controller.StageParam, label map[string]st
 
 		// 绑定数据卷
 		VolumeMounts: []corev1.VolumeMount{
-			{Name: utils.MysqlConfVolumn, MountPath: utils.MysqlConfPath},
-			{Name: utils.MysqlConfigMapVolumn, MountPath: utils.MysqlConfigMapPath},
-			{Name: pvcname, MountPath: utils.MysqlDataPath},
+			{Name: myctrl.MysqlConfVolumn, MountPath: myctrl.MysqlConfPath},
+			{Name: myctrl.MysqlConfigMapVolumn, MountPath: myctrl.MysqlConfigMapPath},
+			{Name: pvcname, MountPath: myctrl.MysqlDataPath},
 		},
 
 		// 启动sidecar脚本
-		Command: []string{"bash", fmt.Sprintf("%s/%s", utils.MysqlConfigMapPath, utils.FileReplicaSideCar)},
+		Command: []string{"bash", sidecarsh},
 	}
 }
 
@@ -292,7 +291,7 @@ func (s *ReplicaCreateStage) isReplicaStsReady(p *controller.StageParam) (*ctrl.
 	sts := &appsv1.StatefulSet{}
 	if err := p.Controller.Client.Get(p.Ctx, types.NamespacedName{
 		Namespace: p.Cr.Namespace,
-		Name:      utils.ResourceName(p.Cr.Name, utils.ReplicaStatefulSet),
+		Name:      myctrl.ResourceName(p.Cr.Name, myctrl.ReplicaStatefulSet),
 	}, sts); err != nil {
 		return nil, err
 	}

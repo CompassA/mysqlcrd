@@ -11,8 +11,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/mysqlcrd/internal/controller"
-	"github.com/mysqlcrd/pkg/utils"
+	myctrl "github.com/mysqlcrd/internal/controller"
 	corev1 "k8s.io/api/core/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -27,7 +26,7 @@ func NewConfinMapStage(dir string) (*ConfigMapStage, error) {
 	stage := &ConfigMapStage{
 		Files: map[string]string{},
 	}
-	for _, name := range utils.FileNameArr {
+	for _, name := range myctrl.FileNameArr {
 		content, err := os.ReadFile(dir + name)
 		if err != nil {
 			return nil, fmt.Errorf("read file from %s%s failed, %w", dir, name, err)
@@ -38,10 +37,10 @@ func NewConfinMapStage(dir string) (*ConfigMapStage, error) {
 }
 
 // 执行Reconcile, 创建
-func (s *ConfigMapStage) Process(p *controller.StageParam) (res *ctrl.Result, err error) {
+func (s *ConfigMapStage) Process(p *myctrl.StageParam) (res *ctrl.Result, err error) {
 	defer func() {
 		if err != nil {
-			if setErr := p.Controller.SetCondition(p.Ctx, p.Cr, utils.ConfigReady, metav1.ConditionFalse, "Create failed", err.Error()); setErr != nil {
+			if setErr := p.Controller.SetCondition(p.Ctx, p.Cr, myctrl.ConfigReady, metav1.ConditionFalse, "Create failed", err.Error()); setErr != nil {
 				p.Logger.Error(setErr, "set condition failed", "stage", s.Name())
 			}
 		}
@@ -58,17 +57,17 @@ func (s *ConfigMapStage) Process(p *controller.StageParam) (res *ctrl.Result, er
 	}
 
 	// 标记config创建完成
-	if err := p.Controller.SetCondition(p.Ctx, p.Cr, utils.ConfigReady, metav1.ConditionTrue, "Ready", ""); err != nil {
+	if err := p.Controller.SetCondition(p.Ctx, p.Cr, myctrl.ConfigReady, metav1.ConditionTrue, "Ready", ""); err != nil {
 		p.Logger.Error(err, "set condition failed", "stage", s.Name())
 	}
 
 	return nil, nil
 }
 
-func (s *ConfigMapStage) reconcileSecret(p *controller.StageParam) (err error) {
+func (s *ConfigMapStage) reconcileSecret(p *myctrl.StageParam) (err error) {
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      utils.ResourceName(p.Cr.Name, utils.Secret),
+			Name:      myctrl.ResourceName(p.Cr.Name, myctrl.Secret),
 			Namespace: p.Cr.Namespace,
 		},
 	}
@@ -81,9 +80,9 @@ func (s *ConfigMapStage) reconcileSecret(p *controller.StageParam) (err error) {
 		secret.Type = "Opaque"
 
 		secret.Data = map[string][]byte{
-			utils.EnvMysqlRootPassword:       []byte(base64.StdEncoding.EncodeToString([]byte(*p.Cr.Spec.Master.RootPassword))),
-			utils.EnvMysqlMasterDumpUser:     []byte(base64.StdEncoding.EncodeToString([]byte(*p.Cr.Spec.Master.ReplicaAccount))),
-			utils.EnvMysqlMasterDumpPassword: []byte(base64.StdEncoding.EncodeToString([]byte(*p.Cr.Spec.Master.ReplicaPassword))),
+			myctrl.EnvMysqlRootPassword:       []byte(base64.StdEncoding.EncodeToString([]byte(*p.Cr.Spec.Master.RootPassword))),
+			myctrl.EnvMysqlMasterDumpUser:     []byte(base64.StdEncoding.EncodeToString([]byte(*p.Cr.Spec.Master.ReplicaAccount))),
+			myctrl.EnvMysqlMasterDumpPassword: []byte(base64.StdEncoding.EncodeToString([]byte(*p.Cr.Spec.Master.ReplicaPassword))),
 		}
 
 		return nil
@@ -96,10 +95,10 @@ func (s *ConfigMapStage) reconcileSecret(p *controller.StageParam) (err error) {
 	return nil
 }
 
-func (s *ConfigMapStage) reconcileConfigmap(p *controller.StageParam) (err error) {
+func (s *ConfigMapStage) reconcileConfigmap(p *myctrl.StageParam) (err error) {
 	cm := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      utils.ResourceName(p.Cr.Name, utils.ConfigMap),
+			Name:      myctrl.ResourceName(p.Cr.Name, myctrl.ConfigMap),
 			Namespace: p.Cr.Namespace,
 		},
 	}

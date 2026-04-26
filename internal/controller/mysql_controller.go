@@ -28,7 +28,6 @@ import (
 	"github.com/go-logr/logr"
 	tomatov1 "github.com/mysqlcrd/api/v1"
 	v1 "github.com/mysqlcrd/api/v1"
-	"github.com/mysqlcrd/pkg/utils"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -57,7 +56,7 @@ type StageParam struct {
 	Logger     *logr.Logger
 }
 
-// +kubebuilder:rbac:groups=tomato.github.com,resources=mysqls;pods;services;configmaps;secrets;deployments;statefulsets,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=tomato.github.com,resources=mysqls;pods;services;configmaps;secrets;deployments;statefulsets;persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=tomato.github.com,resources=mysqls/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=tomato.github.com,resources=mysqls/finalizers,verbs=update
 
@@ -80,16 +79,16 @@ func (r *MySQLReconciler) Reconcile(ctx context.Context, req ctrl.Request) (resu
 	}
 
 	// 设置状态
-	if err := r.SetCondition(ctx, cr, utils.ReconcileProcessing, metav1.ConditionTrue, "Reconciling", ""); err != nil {
+	if err := r.SetCondition(ctx, cr, ReconcileProcessing, metav1.ConditionTrue, "Reconciling", ""); err != nil {
 		return ctrl.Result{}, err
 	}
 	defer func() {
 		// 出现错误
 		if err != nil {
-			if setErr := r.SetCondition(ctx, cr, utils.ReconcileProcessing, metav1.ConditionTrue, "error", err.Error()); setErr != nil {
+			if setErr := r.SetCondition(ctx, cr, ReconcileProcessing, metav1.ConditionTrue, "error", err.Error()); setErr != nil {
 				logger.Error(setErr, "set condition failed")
 			}
-			if setErr := r.SetCondition(ctx, cr, utils.ConfigReady, metav1.ConditionFalse, "error", err.Error()); setErr != nil {
+			if setErr := r.SetCondition(ctx, cr, ConfigReady, metav1.ConditionFalse, "error", err.Error()); setErr != nil {
 				logger.Error(setErr, "set condition failed")
 			}
 			return
@@ -97,21 +96,21 @@ func (r *MySQLReconciler) Reconcile(ctx context.Context, req ctrl.Request) (resu
 
 		// 等待资源就绪
 		if result.RequeueAfter > 0 {
-			if setErr := r.SetCondition(ctx, cr, utils.ReconcileProcessing, metav1.ConditionTrue, "Retrying", ""); setErr != nil {
+			if setErr := r.SetCondition(ctx, cr, ReconcileProcessing, metav1.ConditionTrue, "Retrying", ""); setErr != nil {
 				logger.Error(setErr, "set condition failed")
 			}
 
-			if setErr := r.SetCondition(ctx, cr, utils.ConfigReady, metav1.ConditionFalse, "Retrying", ""); setErr != nil {
+			if setErr := r.SetCondition(ctx, cr, ConfigReady, metav1.ConditionFalse, "Retrying", ""); setErr != nil {
 				logger.Error(setErr, "set condition failed")
 			}
 			return
 		}
 
 		// Reconcile完成
-		if setErr := r.SetCondition(ctx, cr, utils.ReconcileProcessing, metav1.ConditionFalse, "succeed", ""); setErr != nil {
+		if setErr := r.SetCondition(ctx, cr, ReconcileProcessing, metav1.ConditionFalse, "succeed", ""); setErr != nil {
 			logger.Error(setErr, "set condition failed")
 		}
-		if setErr := r.SetCondition(ctx, cr, utils.ConfigReady, metav1.ConditionTrue, "Ready", ""); setErr != nil {
+		if setErr := r.SetCondition(ctx, cr, ConfigReady, metav1.ConditionTrue, "Ready", ""); setErr != nil {
 			logger.Error(setErr, "set condition failed")
 		}
 	}()

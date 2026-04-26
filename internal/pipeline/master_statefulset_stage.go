@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/mysqlcrd/internal/controller"
+	myctrl "github.com/mysqlcrd/internal/controller"
 	"github.com/mysqlcrd/pkg/utils"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -23,23 +23,23 @@ import (
 type MasterCreateStage struct{}
 
 // 执行Reconcile
-func (s *MasterCreateStage) Process(p *controller.StageParam) (res *ctrl.Result, err error) {
+func (s *MasterCreateStage) Process(p *myctrl.StageParam) (res *ctrl.Result, err error) {
 	// 更新Controller状态
 	defer func() {
 		// 记录异常
 		if err != nil {
-			if setErr := p.Controller.SetCondition(p.Ctx, p.Cr, utils.MainStsReady, metav1.ConditionFalse, "create master failed", err.Error()); setErr != nil {
+			if setErr := p.Controller.SetCondition(p.Ctx, p.Cr, myctrl.MainStsReady, metav1.ConditionFalse, "create master failed", err.Error()); setErr != nil {
 				p.Logger.Error(setErr, "set condition failed", "stage", s.Name())
 			}
 			return
 		}
 		// 什么都没返回代表当前阶段结束
 		if res == nil {
-			if setErr := p.Controller.SetCondition(p.Ctx, p.Cr, utils.MainStsReady, metav1.ConditionTrue, "create master failed", err.Error()); setErr != nil {
+			if setErr := p.Controller.SetCondition(p.Ctx, p.Cr, myctrl.MainStsReady, metav1.ConditionTrue, "create master failed", err.Error()); setErr != nil {
 				p.Logger.Error(setErr, "set condition failed", "stage", s.Name())
 			}
 		} else {
-			if setErr := p.Controller.SetCondition(p.Ctx, p.Cr, utils.MainStsReady, metav1.ConditionFalse, "waiting for master-creation to be completed", ""); setErr != nil {
+			if setErr := p.Controller.SetCondition(p.Ctx, p.Cr, myctrl.MainStsReady, metav1.ConditionFalse, "waiting for master-creation to be completed", ""); setErr != nil {
 				p.Logger.Error(setErr, "set condition failed", "stage", s.Name())
 			}
 		}
@@ -47,7 +47,7 @@ func (s *MasterCreateStage) Process(p *controller.StageParam) (res *ctrl.Result,
 
 	// 应用标记
 	label := map[string]string{
-		utils.AppLabel: utils.ResourceName(p.Cr.Name, utils.MasterPod),
+		myctrl.AppLabel: myctrl.ResourceName(p.Cr.Name, myctrl.MasterPod),
 	}
 
 	// 创建Service
@@ -68,10 +68,10 @@ func (s *MasterCreateStage) Process(p *controller.StageParam) (res *ctrl.Result,
 	return nil, nil
 }
 
-func (s *MasterCreateStage) reconcileService(p *controller.StageParam, label map[string]string) error {
+func (s *MasterCreateStage) reconcileService(p *myctrl.StageParam, label map[string]string) error {
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      utils.ResourceName(p.Cr.Name, utils.MasterService),
+			Name:      myctrl.ResourceName(p.Cr.Name, myctrl.MasterService),
 			Namespace: p.Cr.Namespace,
 		},
 	}
@@ -88,10 +88,10 @@ func (s *MasterCreateStage) reconcileService(p *controller.StageParam, label map
 				{
 					Name:     fmt.Sprintf("%s-mysqlsvcport", p.Cr.Name),
 					Protocol: corev1.ProtocolTCP,
-					Port:     utils.MysqlServicePort,
+					Port:     myctrl.MysqlServicePort,
 					TargetPort: intstr.IntOrString{
 						Type:   intstr.String,
-						StrVal: utils.MysqlPodPortName,
+						StrVal: myctrl.MysqlPodPortName,
 					},
 				},
 			},
@@ -107,10 +107,10 @@ func (s *MasterCreateStage) reconcileService(p *controller.StageParam, label map
 	return nil
 }
 
-func (s *MasterCreateStage) reconcileStatefulset(p *controller.StageParam, label map[string]string) error {
+func (s *MasterCreateStage) reconcileStatefulset(p *myctrl.StageParam, label map[string]string) error {
 	sts := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      utils.ResourceName(p.Cr.Name, utils.MasterStatefulSet),
+			Name:      myctrl.ResourceName(p.Cr.Name, myctrl.MasterStatefulSet),
 			Namespace: p.Cr.Namespace,
 		},
 	}
@@ -126,24 +126,20 @@ func (s *MasterCreateStage) reconcileStatefulset(p *controller.StageParam, label
 		mem := p.Cr.Spec.Memory
 		scn := p.Cr.Spec.StorageClassName
 
-		pvcname, pvc := utils.CreatePVC(crname, scn, storage, utils.MasterPVC) // pvc
-		volumns := createPodVolumns(p)                                         // volumn
-		init := createInitContainer()                                          // 初始化容器
-		mysql := utils.CreateMysqlContainer(crname, cpu, mem, pvcname)         // mysql容器
-		xtrabackup := createSidecarContainer(p, pvcname)                       // xtrabackup sidecar容器
+		pvcname, pvc := myctrl.CreatePVC(crname, scn, storage, myctrl.MasterPVC) // pvc
+		volumns := createPodVolumns(p)                                           // volumn
+		init := createInitContainer()                                            // 初始化容器
+		mysql := myctrl.CreateMysqlContainer(crname, cpu, mem, pvcname)          // mysql容器
+		xtrabackup := createSidecarContainer(p, pvcname)                         // xtrabackup sidecar容器
 
 		replicas := int32(1)
 		terminationGracePeriodSeconds := int64(60)
 
 		sts.Spec = appsv1.StatefulSetSpec{
-			ServiceName:          utils.ResourceName(crname, utils.MasterService), // 绑定headlessservice
-			Replicas:             &replicas,                                       // 主库pod数固定为1
-			VolumeClaimTemplates: pvc,                                             // PVC
-
-			// POD selector
-			Selector: &metav1.LabelSelector{MatchLabels: label},
-
-			// MysqlPOD
+			ServiceName:          myctrl.ResourceName(crname, myctrl.MasterService), // 绑定headlessservice
+			Replicas:             &replicas,                                         // 主库pod数固定为1
+			VolumeClaimTemplates: pvc,                                               // PVC
+			Selector:             &metav1.LabelSelector{MatchLabels: label},         // POD selector
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{Labels: label},
 				Spec: corev1.PodSpec{
@@ -164,28 +160,28 @@ func (s *MasterCreateStage) reconcileStatefulset(p *controller.StageParam, label
 	return nil
 }
 
-func createPodVolumns(p *controller.StageParam) []corev1.Volume {
+func createPodVolumns(p *myctrl.StageParam) []corev1.Volume {
 	return []corev1.Volume{
 		{ // 配置数据卷
-			Name: utils.MysqlConfVolumn,
+			Name: myctrl.MysqlConfVolumn,
 			VolumeSource: corev1.VolumeSource{
 				EmptyDir: &corev1.EmptyDirVolumeSource{},
 			},
 		},
 		{ // ConfigMap数据卷
-			Name: utils.MysqlConfigMapVolumn,
+			Name: myctrl.MysqlConfigMapVolumn,
 			VolumeSource: corev1.VolumeSource{
 				ConfigMap: &corev1.ConfigMapVolumeSource{
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: utils.ResourceName(p.Cr.Name, utils.ConfigMap),
+						Name: myctrl.ResourceName(p.Cr.Name, myctrl.ConfigMap),
 					},
 					Items: []corev1.KeyToPath{
 						// 主库配置文件
-						{Key: utils.FileMasterConf, Path: utils.FileMasterConf},
+						{Key: myctrl.FileMasterConf, Path: myctrl.FileMasterConf},
 						// 创建主从复制账号的脚本
-						{Key: utils.FileCreateReplicaAccountProcedure, Path: utils.FileCreateReplicaAccountProcedure},
+						{Key: myctrl.FileCreateReplicaAccountProcedure, Path: myctrl.FileCreateReplicaAccountProcedure},
 						// 启动xtrabackup sidecar的脚本
-						{Key: utils.FileMasterSideCar, Path: utils.FileMasterSideCar},
+						{Key: myctrl.FileMasterSideCar, Path: myctrl.FileMasterSideCar},
 					},
 				},
 			},
@@ -194,37 +190,36 @@ func createPodVolumns(p *controller.StageParam) []corev1.Volume {
 }
 
 func createInitContainer() *corev1.Container {
+	// 将cofigmap中的配置文件, 拷贝到mysql conf目录下
+	srcconf := fmt.Sprintf("%s/%s", myctrl.MysqlConfigMapPath, myctrl.FileMasterConf)
+	dstconf := fmt.Sprintf("%s/my.cnf", myctrl.MysqlConfPath)
 	return &corev1.Container{
-		Name:  "init-conf",
-		Image: utils.MysqlImage,
+		Name:    "init-conf",
+		Image:   myctrl.MysqlImage,
+		Command: []string{"cp", srcconf, dstconf},
 		VolumeMounts: []corev1.VolumeMount{
-			{Name: utils.MysqlConfVolumn, MountPath: utils.MysqlConfPath},
-			{Name: utils.MysqlConfigMapVolumn, MountPath: utils.MysqlConfigMapPath},
-		},
-
-		// 将cofigmap中的配置文件, 拷贝到mysql conf目录下
-		Command: []string{
-			"cp",
-			fmt.Sprintf("%s/%s", utils.MysqlConfigMapPath, utils.FileMasterConf),
-			fmt.Sprintf("%s/my.cnf", utils.MysqlConfPath),
+			{Name: myctrl.MysqlConfVolumn, MountPath: myctrl.MysqlConfPath},
+			{Name: myctrl.MysqlConfigMapVolumn, MountPath: myctrl.MysqlConfigMapPath},
 		},
 	}
 }
 
-func createSidecarContainer(p *controller.StageParam, masterPVCName string) *corev1.Container {
+func createSidecarContainer(p *myctrl.StageParam, masterPVCName string) *corev1.Container {
 	// root密码 主从复制账号密码
-	env := utils.EnvSecretRef(utils.ResourceName(p.Cr.Name, utils.Secret),
-		[]string{utils.EnvMysqlRootPassword, utils.EnvMysqlMasterDumpUser, utils.EnvMysqlMasterDumpPassword})
+	env := myctrl.EnvSecretRef(myctrl.ResourceName(p.Cr.Name, myctrl.Secret),
+		[]string{myctrl.EnvMysqlRootPassword, myctrl.EnvMysqlMasterDumpUser, myctrl.EnvMysqlMasterDumpPassword})
 
-	cpu := resource.MustParse(utils.XtrabackupCpu)
-	mem := resource.MustParse(utils.XtrabackupMem)
+	cpu := resource.MustParse(myctrl.XtrabackupCpu)
+	mem := resource.MustParse(myctrl.XtrabackupMem)
+
+	sidecarsh := fmt.Sprintf("%s/%s", myctrl.MysqlConfigMapPath, myctrl.FileMasterSideCar)
 
 	return &corev1.Container{
 		Name:  "xtrabackup",
-		Image: utils.XtrabackupImage,
+		Image: myctrl.XtrabackupImage,
 		Env:   env,
 		Ports: []corev1.ContainerPort{
-			{Name: "xtrabackup", ContainerPort: utils.XtrabackupPort},
+			{Name: "xtrabackup", ContainerPort: myctrl.XtrabackupPort},
 		},
 
 		// xtrabackup 占用的资源
@@ -241,21 +236,21 @@ func createSidecarContainer(p *controller.StageParam, masterPVCName string) *cor
 
 		// 绑定数据卷
 		VolumeMounts: []corev1.VolumeMount{
-			{Name: utils.MysqlConfVolumn, MountPath: utils.MysqlConfPath},
-			{Name: utils.MysqlConfigMapVolumn, MountPath: utils.MysqlConfigMapPath},
-			{Name: masterPVCName, MountPath: utils.MysqlDataPath},
+			{Name: myctrl.MysqlConfVolumn, MountPath: myctrl.MysqlConfPath},
+			{Name: myctrl.MysqlConfigMapVolumn, MountPath: myctrl.MysqlConfigMapPath},
+			{Name: masterPVCName, MountPath: myctrl.MysqlDataPath},
 		},
 
 		// 启动sidecar脚本
-		Command: []string{"bash", fmt.Sprintf("%s/%s", utils.MysqlConfigMapPath, utils.FileMasterSideCar)},
+		Command: []string{"bash", sidecarsh},
 	}
 }
 
-func (*MasterCreateStage) isStsReady(p *controller.StageParam) (*ctrl.Result, error) {
+func (*MasterCreateStage) isStsReady(p *myctrl.StageParam) (*ctrl.Result, error) {
 	sts := &appsv1.StatefulSet{}
 	if err := p.Controller.Client.Get(p.Ctx, types.NamespacedName{
 		Namespace: p.Cr.Namespace,
-		Name:      utils.ResourceName(p.Cr.Name, utils.MasterStatefulSet),
+		Name:      myctrl.ResourceName(p.Cr.Name, myctrl.MasterStatefulSet),
 	}, sts); err != nil {
 		return nil, err
 	}

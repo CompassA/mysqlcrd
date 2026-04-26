@@ -7,7 +7,7 @@ package pipeline
 import (
 	"testing"
 
-	"github.com/mysqlcrd/pkg/utils"
+	myctrl "github.com/mysqlcrd/internal/controller"
 )
 
 func TestNewConfinMapStage(t *testing.T) {
@@ -16,7 +16,7 @@ func TestNewConfinMapStage(t *testing.T) {
 		t.Fatalf("NewConfigMapState() failed: %v", err)
 	}
 
-	for _, name := range utils.FileNameArr {
+	for _, name := range myctrl.FileNameArr {
 		if _, ok := stage.Files[name]; !ok {
 			t.Fatalf("file %s not found", name)
 		}
