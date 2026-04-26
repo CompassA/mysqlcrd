@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"time"
 
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -56,9 +57,11 @@ type StageParam struct {
 	Logger     *logr.Logger
 }
 
-// +kubebuilder:rbac:groups=tomato.github.com,resources=mysqls;pods;services;configmaps;secrets;deployments;statefulsets;persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=tomato.github.com,resources=mysqls,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=tomato.github.com,resources=mysqls/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=tomato.github.com,resources=mysqls/finalizers,verbs=update
+// +kubebuilder:rbac:groups="",resources=pods;services;configmaps;secrets;persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=apps,resources=deployments;statefulsets,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -78,43 +81,6 @@ func (r *MySQLReconciler) Reconcile(ctx context.Context, req ctrl.Request) (resu
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	// 设置状态
-	if err := r.SetCondition(ctx, cr, ReconcileProcessing, metav1.ConditionTrue, "Reconciling", ""); err != nil {
-		return ctrl.Result{}, err
-	}
-	defer func() {
-		// 出现错误
-		if err != nil {
-			if setErr := r.SetCondition(ctx, cr, ReconcileProcessing, metav1.ConditionTrue, "error", err.Error()); setErr != nil {
-				logger.Error(setErr, "set condition failed")
-			}
-			if setErr := r.SetCondition(ctx, cr, ConfigReady, metav1.ConditionFalse, "error", err.Error()); setErr != nil {
-				logger.Error(setErr, "set condition failed")
-			}
-			return
-		}
-
-		// 等待资源就绪
-		if result.RequeueAfter > 0 {
-			if setErr := r.SetCondition(ctx, cr, ReconcileProcessing, metav1.ConditionTrue, "Retrying", ""); setErr != nil {
-				logger.Error(setErr, "set condition failed")
-			}
-
-			if setErr := r.SetCondition(ctx, cr, ConfigReady, metav1.ConditionFalse, "Retrying", ""); setErr != nil {
-				logger.Error(setErr, "set condition failed")
-			}
-			return
-		}
-
-		// Reconcile完成
-		if setErr := r.SetCondition(ctx, cr, ReconcileProcessing, metav1.ConditionFalse, "succeed", ""); setErr != nil {
-			logger.Error(setErr, "set condition failed")
-		}
-		if setErr := r.SetCondition(ctx, cr, ConfigReady, metav1.ConditionTrue, "Ready", ""); setErr != nil {
-			logger.Error(setErr, "set condition failed")
-		}
-	}()
-
 	// 执行具体逻辑
 	p := &StageParam{
 		Controller: r,
@@ -130,7 +96,7 @@ func (r *MySQLReconciler) Reconcile(ctx context.Context, req ctrl.Request) (resu
 		result, err := stage.Process(p)
 		if err != nil {
 			logger.Error(err, "operate stage failed", "stage", stage.Name())
-			return *result, err
+			return ctrl.Result{RequeueAfter: time.Minute}, err
 		}
 		if result != nil {
 			return *result, nil
@@ -149,21 +115,26 @@ func (r *MySQLReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 // 设置Condition
 func (r *MySQLReconciler) SetCondition(ctx context.Context, cr *tomatov1.MySQL, condType string, status metav1.ConditionStatus, reason string, message string) error {
+	latest := &tomatov1.MySQL{}
+	if err := r.Get(ctx, client.ObjectKeyFromObject(cr), latest); err != nil {
+		return err
+	}
+
 	newCond := metav1.Condition{
 		Type:               condType,
 		Status:             status,
 		Reason:             reason,
 		Message:            message,
 		LastTransitionTime: metav1.Now(),
-		ObservedGeneration: cr.Generation,
+		ObservedGeneration: latest.Generation,
 	}
 
-	cur := meta.FindStatusCondition(cr.Status.Conditions, condType)
+	cur := meta.FindStatusCondition(latest.Status.Conditions, condType)
 	if cur != nil && cur.Status == status && cur.Reason == reason && cur.Message == message {
 		return nil
 	}
 
-	meta.SetStatusCondition(&cr.Status.Conditions, newCond)
-
-	return r.Status().Update(ctx, cr)
+	patch := client.MergeFrom(latest.DeepCopy())
+	meta.SetStatusCondition(&latest.Status.Conditions, newCond)
+	return r.Status().Patch(ctx, latest, patch)
 }

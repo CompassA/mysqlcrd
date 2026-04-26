@@ -5,16 +5,38 @@ metadata:
   name: manager-role
 rules:
 - apiGroups:
-  - tomato.github.com
+  - ""
   resources:
   - configmaps
-  - deployments
-  - mysqls
   - persistentvolumeclaims
   - pods
   - secrets
   - services
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - apps
+  resources:
+  - deployments
   - statefulsets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - tomato.github.com
+  resources:
+  - mysqls
   verbs:
   - create
   - delete

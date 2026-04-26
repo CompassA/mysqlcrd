@@ -24,27 +24,6 @@ type MasterCreateStage struct{}
 
 // 执行Reconcile
 func (s *MasterCreateStage) Process(p *myctrl.StageParam) (res *ctrl.Result, err error) {
-	// 更新Controller状态
-	defer func() {
-		// 记录异常
-		if err != nil {
-			if setErr := p.Controller.SetCondition(p.Ctx, p.Cr, myctrl.MainStsReady, metav1.ConditionFalse, "create master failed", err.Error()); setErr != nil {
-				p.Logger.Error(setErr, "set condition failed", "stage", s.Name())
-			}
-			return
-		}
-		// 什么都没返回代表当前阶段结束
-		if res == nil {
-			if setErr := p.Controller.SetCondition(p.Ctx, p.Cr, myctrl.MainStsReady, metav1.ConditionTrue, "create master failed", err.Error()); setErr != nil {
-				p.Logger.Error(setErr, "set condition failed", "stage", s.Name())
-			}
-		} else {
-			if setErr := p.Controller.SetCondition(p.Ctx, p.Cr, myctrl.MainStsReady, metav1.ConditionFalse, "waiting for master-creation to be completed", ""); setErr != nil {
-				p.Logger.Error(setErr, "set condition failed", "stage", s.Name())
-			}
-		}
-	}()
-
 	// 应用标记
 	label := map[string]string{
 		myctrl.AppLabel: myctrl.ResourceName(p.Cr.Name, myctrl.MasterPod),
@@ -148,6 +127,11 @@ func (s *MasterCreateStage) reconcileStatefulset(p *myctrl.StageParam, label map
 					Volumes:                       volumns,                                 // 数据卷
 					TerminationGracePeriodSeconds: &terminationGracePeriodSeconds,
 				},
+			},
+			// PVC保留策略, statefulset删除/缩容后直接删除PVC
+			PersistentVolumeClaimRetentionPolicy: &appsv1.StatefulSetPersistentVolumeClaimRetentionPolicy{
+				WhenDeleted: appsv1.DeletePersistentVolumeClaimRetentionPolicyType,
+				WhenScaled:  appsv1.DeletePersistentVolumeClaimRetentionPolicyType,
 			},
 		}
 		return nil

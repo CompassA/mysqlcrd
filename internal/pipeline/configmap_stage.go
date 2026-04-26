@@ -38,14 +38,6 @@ func NewConfinMapStage(dir string) (*ConfigMapStage, error) {
 
 // 执行Reconcile, 创建
 func (s *ConfigMapStage) Process(p *myctrl.StageParam) (res *ctrl.Result, err error) {
-	defer func() {
-		if err != nil {
-			if setErr := p.Controller.SetCondition(p.Ctx, p.Cr, myctrl.ConfigReady, metav1.ConditionFalse, "Create failed", err.Error()); setErr != nil {
-				p.Logger.Error(setErr, "set condition failed", "stage", s.Name())
-			}
-		}
-	}()
-
 	// create configmap
 	if err := s.reconcileConfigmap(p); err != nil {
 		return nil, err
@@ -56,10 +48,7 @@ func (s *ConfigMapStage) Process(p *myctrl.StageParam) (res *ctrl.Result, err er
 		return nil, err
 	}
 
-	// 标记config创建完成
-	if err := p.Controller.SetCondition(p.Ctx, p.Cr, myctrl.ConfigReady, metav1.ConditionTrue, "Ready", ""); err != nil {
-		p.Logger.Error(err, "set condition failed", "stage", s.Name())
-	}
+	// 标记config创建完成 fixme tomato
 
 	return nil, nil
 }

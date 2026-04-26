@@ -5,6 +5,8 @@
 package pipeline
 
 import (
+	"time"
+
 	tomatoctrl "github.com/mysqlcrd/internal/controller"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -22,7 +24,9 @@ func (s *FinalizerStage) Process(p *tomatoctrl.StageParam) (*ctrl.Result, error)
 		if !controllerutil.ContainsFinalizer(p.Cr, finalizer) {
 			controllerutil.AddFinalizer(p.Cr, finalizer)
 			if err := p.Controller.Update(p.Ctx, p.Cr); err != nil {
-				return &reconcile.Result{}, err
+				return nil, err
+			} else {
+				return &reconcile.Result{RequeueAfter: 5 * time.Second}, nil
 			}
 		}
 		return nil, nil

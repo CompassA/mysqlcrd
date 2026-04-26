@@ -185,7 +185,7 @@ func main() {
 		os.Exit(1)
 	}
 	pipelines := []myctrl.OperatorStage{
-		&pipeline.FinalizerStage{},
+		// &pipeline.FinalizerStage{},
 		cmstage,
 		&pipeline.MasterCreateStage{},
 		&pipeline.ReplicaCreateStage{},

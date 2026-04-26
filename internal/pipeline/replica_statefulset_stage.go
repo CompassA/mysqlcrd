@@ -31,27 +31,6 @@ func (s *ReplicaCreateStage) Process(p *myctrl.StageParam) (res *ctrl.Result, er
 		return nil, nil
 	}
 
-	// 更新Controller状态
-	defer func() {
-		// 记录异常
-		if err != nil {
-			if setErr := p.Controller.SetCondition(p.Ctx, p.Cr, myctrl.ReplicaStsReady, metav1.ConditionFalse, "create replica failed", err.Error()); setErr != nil {
-				p.Logger.Error(setErr, "set condition failed", "stage", s.Name())
-			}
-			return
-		}
-		// 什么都没返回代表当前阶段结束
-		if res == nil {
-			if setErr := p.Controller.SetCondition(p.Ctx, p.Cr, myctrl.ReplicaStsReady, metav1.ConditionTrue, "create replica failed", err.Error()); setErr != nil {
-				p.Logger.Error(setErr, "set condition failed", "stage", s.Name())
-			}
-		} else {
-			if setErr := p.Controller.SetCondition(p.Ctx, p.Cr, myctrl.ReplicaStsReady, metav1.ConditionFalse, "waiting for replica-creation to be completed", ""); setErr != nil {
-				p.Logger.Error(setErr, "set condition failed", "stage", s.Name())
-			}
-		}
-	}()
-
 	// 从库POD标签
 	label := map[string]string{
 		myctrl.AppLabel:       myctrl.ResourceName(p.Cr.Name, myctrl.ReplicaPod),
@@ -155,6 +134,11 @@ func (s *ReplicaCreateStage) reconcileStatefulSet(p *controller.StageParam, labe
 					Volumes:                       volumns,                                 // 数据卷
 					TerminationGracePeriodSeconds: &terminationGracePeriodSeconds,
 				},
+			},
+			// PVC保留策略, statefulset删除/缩容后直接删除PVC
+			PersistentVolumeClaimRetentionPolicy: &appsv1.StatefulSetPersistentVolumeClaimRetentionPolicy{
+				WhenDeleted: appsv1.DeletePersistentVolumeClaimRetentionPolicyType,
+				WhenScaled:  appsv1.DeletePersistentVolumeClaimRetentionPolicyType,
 			},
 		}
 		return nil
