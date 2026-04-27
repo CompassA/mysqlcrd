@@ -161,7 +161,10 @@ func CreateMysqlContainer(crname string, cpu *resource.Quantity, mem *resource.Q
 	// root密码
 	env := EnvSecretRef(ResourceName(crname, Secret), []string{EnvMysqlRootPassword})
 
+	// rp := corev1.ContainerRestartPolicyNever
 	return &corev1.Container{
+		// RestartPolicy: &rp,
+
 		Name:  "mysql",
 		Image: MysqlImage,
 		Env:   env,
@@ -188,8 +191,7 @@ func CreateMysqlContainer(crname string, cpu *resource.Quantity, mem *resource.Q
 			ProbeHandler: corev1.ProbeHandler{
 				Exec: &corev1.ExecAction{
 					Command: []string{
-						"bash", "\"-c\"",
-						fmt.Sprintf("mysql -h 127.0.0.1 -uroot -p$%s -e \"SELECT 1\"", EnvMysqlRootPassword),
+						"bash", "-c", fmt.Sprintf("mysql -h 127.0.0.1 -uroot -p$%s -e \"SELECT 1\"", EnvMysqlRootPassword),
 					},
 				},
 			},
