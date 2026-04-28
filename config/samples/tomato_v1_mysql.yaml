@@ -15,11 +15,11 @@ spec:
   #从库配置
   replica:
     # 从库数量
-    size: 2
+    size: 3
   # 磁盘配置
   storageClassName: standard
   storage: 2Gi
   # cpu配置
   cpu: 100m
   # 内存配置
-  memory: 128Mi
+  memory: 512Mi

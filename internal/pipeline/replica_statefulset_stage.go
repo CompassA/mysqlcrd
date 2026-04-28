@@ -13,6 +13,7 @@ import (
 	"github.com/mysqlcrd/pkg/utils"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -63,32 +64,34 @@ func (s *ReplicaCreateStage) reconcileService(p *controller.StageParam, label ma
 		},
 	}
 
-	if op, err := controllerutil.CreateOrUpdate(p.Ctx, p.Controller.Client, svc, func() error {
+	if op, err := controllerutil.CreateOrPatch(p.Ctx, p.Controller.Client, svc, func() error {
 		if err := controllerutil.SetControllerReference(p.Cr, svc, p.Controller.Scheme); err != nil {
 			return err
 		}
 
-		svc.Spec = corev1.ServiceSpec{
-			Selector:  label,
-			ClusterIP: "None",
-			Ports: []corev1.ServicePort{
-				{
-					Name:     fmt.Sprintf("%s-mysql-replica-svc-port", p.Cr.Name),
-					Protocol: corev1.ProtocolTCP,
-					Port:     myctrl.MysqlServicePort,
-					TargetPort: intstr.IntOrString{
-						Type:   intstr.String,
-						StrVal: myctrl.MysqlPodPortName,
+		if svc.CreationTimestamp.IsZero() {
+			svc.Spec = corev1.ServiceSpec{
+				Selector:  label,
+				ClusterIP: "None",
+				Ports: []corev1.ServicePort{
+					{
+						Name:     fmt.Sprintf("%s-mysql-replica-svc-port", p.Cr.Name),
+						Protocol: corev1.ProtocolTCP,
+						Port:     myctrl.MysqlServicePort,
+						TargetPort: intstr.IntOrString{
+							Type:   intstr.String,
+							StrVal: myctrl.MysqlPodPortName,
+						},
 					},
 				},
-			},
+			}
 		}
 
 		return nil
 	}); err != nil {
 		return err
 	} else {
-		p.Logger.Info("replica service reconciled", "CreateOrUpdateRes", op)
+		p.Logger.Info("replica service reconciled", "CreateOrPatchRes", op)
 	}
 
 	return nil
@@ -102,7 +105,7 @@ func (s *ReplicaCreateStage) reconcileStatefulSet(p *controller.StageParam, labe
 		},
 	}
 
-	if op, err := controllerutil.CreateOrUpdate(p.Ctx, p.Controller.Client, sts, func() error {
+	if op, err := controllerutil.CreateOrPatch(p.Ctx, p.Controller.Client, sts, func() error {
 		if err := controllerutil.SetControllerReference(p.Cr, sts, p.Controller.Scheme); err != nil {
 			return err
 		}
@@ -114,38 +117,50 @@ func (s *ReplicaCreateStage) reconcileStatefulSet(p *controller.StageParam, labe
 		scn := p.Cr.Spec.StorageClassName
 
 		pvcname, pvc := myctrl.CreatePVC(crname, scn, storage, myctrl.ReplicaPVC) // pvc
-		volumns := createReplicaPodVolumns(p)                                     // volumn
-		init := createReplicaInitContainer(p, label, pvcname)                     // 初始化容器
 		mysql := myctrl.CreateMysqlContainer(crname, cpu, mem, pvcname)           // mysql容器
-		xtrabackup := createReplicaSidecarContainer(p, label, pvcname)            // xtrabackup sidecar容器
 
-		terminationGracePeriodSeconds := int64(60)
+		// 首次
+		if sts.CreationTimestamp.IsZero() {
+			init := createReplicaInitContainer(p, label, pvcname)          // 初始化容器
+			xtrabackup := createReplicaSidecarContainer(p, label, pvcname) // xtrabackup sidecar容器
+			terminationGracePeriodSeconds := int64(60)
 
-		sts.Spec = appsv1.StatefulSetSpec{
-			ServiceName:          myctrl.ResourceName(crname, myctrl.ReplicaService), // 绑定headlessservice
-			Replicas:             p.Cr.Spec.Replica.Size,                             // 从库pod数
-			VolumeClaimTemplates: pvc,                                                // PVC
-			Selector:             &metav1.LabelSelector{MatchLabels: label},          // POD selector
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{Labels: label},
-				Spec: corev1.PodSpec{
-					InitContainers:                []corev1.Container{*init},               // 初始化, 拷贝配置
-					Containers:                    []corev1.Container{*mysql, *xtrabackup}, // mysql容器组
-					Volumes:                       volumns,                                 // 数据卷
-					TerminationGracePeriodSeconds: &terminationGracePeriodSeconds,
+			sts.Spec = appsv1.StatefulSetSpec{
+				ServiceName:          myctrl.ResourceName(crname, myctrl.ReplicaService), // 绑定headlessservice
+				Replicas:             p.Cr.Spec.Replica.Size,                             // 从库pod数
+				VolumeClaimTemplates: pvc,                                                // PVC
+				Selector:             &metav1.LabelSelector{MatchLabels: label},          // POD selector
+				Template: corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{Labels: label},
+					Spec: corev1.PodSpec{
+						InitContainers:                []corev1.Container{*init},               // 初始化, 拷贝配置
+						Containers:                    []corev1.Container{*mysql, *xtrabackup}, // mysql容器组
+						Volumes:                       createReplicaPodVolumns(p),              // 数据卷
+						TerminationGracePeriodSeconds: &terminationGracePeriodSeconds,
+					},
 				},
-			},
-			// PVC保留策略, statefulset删除/缩容后直接删除PVC
-			PersistentVolumeClaimRetentionPolicy: &appsv1.StatefulSetPersistentVolumeClaimRetentionPolicy{
-				WhenDeleted: appsv1.DeletePersistentVolumeClaimRetentionPolicyType,
-				WhenScaled:  appsv1.DeletePersistentVolumeClaimRetentionPolicyType,
-			},
+				// PVC保留策略, statefulset删除/缩容后直接删除PVC
+				PersistentVolumeClaimRetentionPolicy: &appsv1.StatefulSetPersistentVolumeClaimRetentionPolicy{
+					WhenDeleted: appsv1.DeletePersistentVolumeClaimRetentionPolicyType,
+					WhenScaled:  appsv1.DeletePersistentVolumeClaimRetentionPolicyType,
+				},
+			}
+			return nil
+		}
+
+		// 更新
+		sts.Spec.Replicas = p.Cr.Spec.Replica.Size
+		for i, container := range sts.Spec.Template.Spec.Containers {
+			if container.Name == mysql.Name {
+				sts.Spec.Template.Spec.Containers[i].Resources = mysql.Resources
+				break
+			}
 		}
 		return nil
 	}); err != nil {
 		return err
 	} else {
-		p.Logger.Info("master statefulset reconciled", "CreateOrUpdateRes", op)
+		p.Logger.Info("replica statefulset reconciled", "CreateOrPatchRes", op)
 	}
 
 	return nil
@@ -277,6 +292,9 @@ func (s *ReplicaCreateStage) isReplicaStsReady(p *controller.StageParam) (*ctrl.
 		Namespace: p.Cr.Namespace,
 		Name:      myctrl.ResourceName(p.Cr.Name, myctrl.ReplicaStatefulSet),
 	}, sts); err != nil {
+		if apierrors.IsNotFound(err) {
+			return &ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+		}
 		return nil, err
 	}
 
@@ -289,5 +307,5 @@ func (s *ReplicaCreateStage) isReplicaStsReady(p *controller.StageParam) (*ctrl.
 
 // 阶段名称
 func (s *ReplicaCreateStage) Name() string {
-	return "CreateMysqlReplica"
+	return "CreateMySQLReplica"
 }

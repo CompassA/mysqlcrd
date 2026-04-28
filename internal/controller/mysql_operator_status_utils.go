@@ -42,20 +42,16 @@ const (
 func ResourceName(crname string, tp CrdResourceType) string {
 	switch tp {
 	case ConfigMap:
-		return fmt.Sprintf("%s-configmap", crname)
+		return fmt.Sprintf("%s-cm", crname)
 	case Secret:
 		return fmt.Sprintf("%s-secret", crname)
 	case MasterService:
-		return fmt.Sprintf("%s-master-service", crname)
+		return fmt.Sprintf("%s-master-svc", crname)
 	case ReplicaService:
-		return fmt.Sprintf("%s-replica-service", crname)
-	case MasterStatefulSet:
-		return fmt.Sprintf("%s-master-sts", crname)
-	case ReplicaStatefulSet:
-		return fmt.Sprintf("%s-replica-sts", crname)
-	case MasterPod:
+		return fmt.Sprintf("%s-replica-svc", crname)
+	case MasterStatefulSet, MasterPod:
 		return fmt.Sprintf("%s-master", crname)
-	case ReplicaPod:
+	case ReplicaStatefulSet, ReplicaPod:
 		return fmt.Sprintf("%s-replica", crname)
 	case MasterPVC:
 		return fmt.Sprintf("%s-master-pvc", crname)
@@ -74,8 +70,8 @@ const (
 	EnvMasterDNS               = "MASTER_SERVICE"             // 主库headless service DNS
 	EnvReplicaServiceName      = "REPLICA_SERVICE_NAME"       // 从库headless service的名称
 
-	AppLabel       = "app"                            // pod "app"标签
-	MasterDNSLabel = "tomatocrd/mysql/master-service" // 主库service
+	AppLabel       = "app"                              // pod "app"标签
+	MasterDNSLabel = "tomato.github.com/master-service" // 主库service
 
 	MysqlImage           = "mysql:8.4.7"       // mysql镜像版本
 	MysqlServicePort     = 3306                // mysql暴露的端口

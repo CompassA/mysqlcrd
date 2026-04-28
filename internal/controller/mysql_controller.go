@@ -96,7 +96,7 @@ func (r *MySQLReconciler) Reconcile(ctx context.Context, req ctrl.Request) (resu
 		result, err := stage.Process(p)
 		if err != nil {
 			logger.Error(err, "operate stage failed", "stage", stage.Name())
-			return ctrl.Result{RequeueAfter: time.Minute}, err
+			return ctrl.Result{RequeueAfter: time.Minute}, nil
 		}
 		if result != nil {
 			return *result, nil
