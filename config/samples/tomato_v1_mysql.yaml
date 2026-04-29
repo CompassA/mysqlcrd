@@ -12,6 +12,7 @@ spec:
     rootPassword: root
     replicaAccount: master0
     replicaPassword: Master@
+    semisync: 3
   #从库配置
   replica:
     # 从库数量

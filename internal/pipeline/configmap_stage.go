@@ -5,7 +5,6 @@
 package pipeline
 
 import (
-	"encoding/base64"
 	"fmt"
 	"os"
 
@@ -67,11 +66,10 @@ func (s *ConfigMapStage) reconcileSecret(p *myctrl.StageParam) (err error) {
 		}
 
 		secret.Type = "Opaque"
-
 		secret.Data = map[string][]byte{
-			myctrl.EnvMysqlRootPassword:       []byte(base64.StdEncoding.EncodeToString([]byte(*p.Cr.Spec.Master.RootPassword))),
-			myctrl.EnvMysqlMasterDumpUser:     []byte(base64.StdEncoding.EncodeToString([]byte(*p.Cr.Spec.Master.ReplicaAccount))),
-			myctrl.EnvMysqlMasterDumpPassword: []byte(base64.StdEncoding.EncodeToString([]byte(*p.Cr.Spec.Master.ReplicaPassword))),
+			myctrl.EnvMysqlRootPassword:       []byte(*p.Cr.Spec.Master.RootPassword),
+			myctrl.EnvMysqlMasterDumpUser:     []byte(*p.Cr.Spec.Master.ReplicaAccount),
+			myctrl.EnvMysqlMasterDumpPassword: []byte(*p.Cr.Spec.Master.ReplicaPassword),
 		}
 
 		return nil

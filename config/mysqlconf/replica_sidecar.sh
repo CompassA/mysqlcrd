@@ -8,6 +8,7 @@
  #  MYSQL_ROOT_PASSWORD: 当前mysql实例root密码
  #  MYSQL_MASTER_DUMP_USER: 主从复制账号名称
  #  MYSQL_MASTER_DUMP_PASSWORD: 主从复制账号密码
+ #  SEMISYNC:                     半同步 从节点数
 ### 
 
 set -ex
@@ -25,8 +26,9 @@ cd /var/lib/mysql
 executed_gtid_set=$(cat xtrabackup_binlog_info | awk '{print $NF}')
 
 # 启动从节点复制
+mysql -h 127.0.0.1 -uroot -p$MYSQL_ROOT_PASSWORD -e "INSTALL PLUGIN rpl_semi_sync_replica SONAME 'semisync_replica.so'" || true   // 异常时不退出
 mysql -h 127.0.0.1 -uroot -p$MYSQL_ROOT_PASSWORD -e "$(</mnt/configmap/start_replication_procedure.sql)"
-mysql -h 127.0.0.1 -uroot -p$MYSQL_ROOT_PASSWORD -e "call mysql.StartReplication('$MASTER_SERVICE', '$MYSQL_MASTER_DUMP_USER', '$MYSQL_MASTER_DUMP_PASSWORD','$executed_gtid_set')"
+mysql -h 127.0.0.1 -uroot -p$MYSQL_ROOT_PASSWORD -e "call mysql.StartReplication('$MASTER_SERVICE', '$MYSQL_MASTER_DUMP_USER', '$MYSQL_MASTER_DUMP_PASSWORD','$executed_gtid_set', $SEMISYNC)"
 
 # 启动xtrabackup
 exec ncat --listen --keep-open --send-only --max-conns=1 3307 -c \

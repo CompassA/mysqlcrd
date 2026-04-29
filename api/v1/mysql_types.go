@@ -51,13 +51,13 @@ type MySQLSpec struct {
 	// +required
 	Storage *resource.Quantity `json:"storage"`
 
+	// 从节点配置
+	// +required
+	Replica *ReplicaSpec `json:"replica,omitempty"`
+
 	// 存储插件配置, 不配置时为standard
 	// +optional
 	StorageClassName *string `json:"storageClassName,omitempty"`
-
-	// 从节点配置
-	// +optional
-	Replica *ReplicaSpec `json:"replica,omitempty"`
 }
 
 type MasterSpec struct {
@@ -72,6 +72,12 @@ type MasterSpec struct {
 	// mysql 主从复制密码
 	// +required
 	ReplicaPassword *string `json:"replicaPassword"`
+
+	// 半同步节点数
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=100
+	Semisync *int32 `json:"semisync"`
 }
 
 type ReplicaSpec struct {

@@ -6,6 +6,7 @@ package pipeline
 
 import (
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/mysqlcrd/internal/controller"
@@ -115,14 +116,15 @@ func (s *ReplicaCreateStage) reconcileStatefulSet(p *controller.StageParam, labe
 		cpu := p.Cr.Spec.Cpu
 		mem := p.Cr.Spec.Memory
 		scn := p.Cr.Spec.StorageClassName
+		semisync := p.Cr.Spec.Master.Semisync
 
 		pvcname, pvc := myctrl.CreatePVC(crname, scn, storage, myctrl.ReplicaPVC) // pvc
 		mysql := myctrl.CreateMysqlContainer(crname, cpu, mem, pvcname)           // mysql容器
-
+		xtrabackup := createReplicaSidecarContainer(p, label, pvcname, semisync)  // xtrabackup sidecar容器
 		// 首次
 		if sts.CreationTimestamp.IsZero() {
-			init := createReplicaInitContainer(p, label, pvcname)          // 初始化容器
-			xtrabackup := createReplicaSidecarContainer(p, label, pvcname) // xtrabackup sidecar容器
+			init := createReplicaInitContainer(p, label, pvcname) // 初始化容器
+
 			terminationGracePeriodSeconds := int64(60)
 
 			sts.Spec = appsv1.StatefulSetSpec{
@@ -240,13 +242,17 @@ func createReplicaInitContainer(p *controller.StageParam, label map[string]strin
 	}
 }
 
-func createReplicaSidecarContainer(p *controller.StageParam, label map[string]string, pvcname string) *corev1.Container {
+func createReplicaSidecarContainer(p *controller.StageParam, label map[string]string, pvcname string, semisync *int32) *corev1.Container {
 	// root密码 主从复制账号密码 主库url
 	env := myctrl.EnvSecretRef(myctrl.ResourceName(p.Cr.Name, myctrl.Secret),
 		[]string{myctrl.EnvMysqlRootPassword, myctrl.EnvMysqlMasterDumpUser, myctrl.EnvMysqlMasterDumpPassword})
 	env = append(env, corev1.EnvVar{
 		Name:  myctrl.EnvMasterDNS,
 		Value: label[myctrl.MasterDNSLabel],
+	})
+	env = append(env, corev1.EnvVar{
+		Name:  myctrl.EnvSemisync,
+		Value: strconv.Itoa(int(*semisync)),
 	})
 
 	cpu := resource.MustParse(myctrl.XtrabackupCpu)

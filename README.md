@@ -9,23 +9,17 @@ metadata:
   name: mysql-sample
   namespace: tomato
 spec:
-  #主库配置
-  master:
+  master:                          # 主库配置
     rootPassword: root
     replicaAccount: master0
     replicaPassword: Master@
-  #从库配置
-  replica:
-    # 从库数量
-    size: 2
-  # 磁盘配置
-  storageClassName: standard
-  storage: 2Gi
-  # cpu配置
-  cpu: 100m
-  # 内存配置
-  memory: 128Mi
-
+    semisync: 3
+  replica:                         # 从库配置   
+    size: 2                        ## 从库数量
+  storageClassName: standard       # 存储插件配置
+  storage: 2Gi                     # 磁盘配置
+  cpu: 100m                        # cpu配置     
+  memory: 128Mi                    # 内存配置
 ```
 
 ## Description

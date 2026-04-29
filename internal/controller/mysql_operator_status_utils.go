@@ -69,6 +69,7 @@ const (
 	EnvPodNamespace            = "POD_NAMESPACE"              // podnamspace
 	EnvMasterDNS               = "MASTER_SERVICE"             // 主库headless service DNS
 	EnvReplicaServiceName      = "REPLICA_SERVICE_NAME"       // 从库headless service的名称
+	EnvSemisync                = "SEMISYNC"                   // 半同步配置
 
 	AppLabel       = "app"                              // pod "app"标签
 	MasterDNSLabel = "tomato.github.com/master-service" // 主库service
@@ -88,6 +89,7 @@ const (
 	XtrabackupPort  = 3307                          // xtrabackup sidecar开放的端口
 
 	DefaultStorageClass = "standard" // 默认的存储类型
+	DefaultSemisync     = 0          // 默认不开启半同步
 
 	// 放入configmap的配置文件名
 	FileCreateReplicaAccountProcedure = "create_replication_account_procedure.sql"
@@ -159,8 +161,6 @@ func CreateMysqlContainer(crname string, cpu *resource.Quantity, mem *resource.Q
 
 	// rp := corev1.ContainerRestartPolicyNever
 	return &corev1.Container{
-		// RestartPolicy: &rp,
-
 		Name:  "mysql",
 		Image: MysqlImage,
 		Env:   env,
@@ -214,6 +214,8 @@ func CreateMysqlContainer(crname string, cpu *resource.Quantity, mem *resource.Q
 			// 绑定pvc
 			{Name: pvcname, MountPath: MysqlDataPath},
 		},
+
+		// RestartPolicy: &rp, // 调试用, 失败时不重启容器
 	}
 }
 

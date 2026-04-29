@@ -7,6 +7,7 @@
  ## MYSQL_ROOT_PASSWORD:          mysql root密码
  ## MYSQL_MASTER_DUMP_USER:       mysql 主从复制账号
  ## MYSQL_MASTER_DUMP_PASSWORD:   mysql 主从复制账号密码
+ ## SEMISYNC:                     半同步 从节点数
 ### 
 
 # 任意一条命令执行失败（返回非零状态码）时，‌立即退出脚本
@@ -20,8 +21,9 @@ sleep 5
 done
 
 # 创建主从复制账号与密码
+mysql -h 127.0.0.1 -uroot -p$MYSQL_ROOT_PASSWORD -e "INSTALL PLUGIN rpl_semi_sync_source SONAME 'semisync_source.so'" || true   // 异常时不退出
 mysql -h 127.0.0.1 -uroot -p$MYSQL_ROOT_PASSWORD -e "$(</mnt/configmap/create_replication_account_procedure.sql)"
-mysql -h 127.0.0.1 -uroot -p$MYSQL_ROOT_PASSWORD -e "call mysql.CreateDumpUser('$MYSQL_MASTER_DUMP_USER', '$MYSQL_MASTER_DUMP_PASSWORD')"
+mysql -h 127.0.0.1 -uroot -p$MYSQL_ROOT_PASSWORD -e "call mysql.CreateDumpUser('$MYSQL_MASTER_DUMP_USER', '$MYSQL_MASTER_DUMP_PASSWORD', $SEMISYNC)"
 echo "mysql-master sidecar-task finished"
 
 # 启动xtrabackup监听

@@ -6,6 +6,7 @@ package pipeline
 
 import (
 	"fmt"
+	"strconv"
 	"time"
 
 	myctrl "github.com/mysqlcrd/internal/controller"
@@ -107,17 +108,18 @@ func (s *MasterCreateStage) reconcileStatefulset(p *myctrl.StageParam, label map
 		cpu := p.Cr.Spec.Cpu
 		mem := p.Cr.Spec.Memory
 		scn := p.Cr.Spec.StorageClassName
+		semisync := p.Cr.Spec.Master.Semisync
 
 		pvcname, pvc := myctrl.CreatePVC(crname, scn, storage, myctrl.MasterPVC) // pvc
 		mysql := myctrl.CreateMysqlContainer(crname, cpu, mem, pvcname)          // mysql容器
+		xtrabackup := createSidecarContainer(p, pvcname, semisync)               // xtrabackup sidecar容器
 
 		// 首次
 		if sts.CreationTimestamp.IsZero() {
 			replicas := int32(1)
 			terminationGracePeriodSeconds := int64(60)
-			volumns := createPodVolumns(p)                   // volumn
-			init := createInitContainer()                    // 初始化容器
-			xtrabackup := createSidecarContainer(p, pvcname) // xtrabackup sidecar容器
+			volumns := createPodVolumns(p) // volumn
+			init := createInitContainer()  // 初始化容器
 
 			sts.Spec = appsv1.StatefulSetSpec{
 				ServiceName:          myctrl.ResourceName(crname, myctrl.MasterService), // 绑定headlessservice
@@ -144,9 +146,13 @@ func (s *MasterCreateStage) reconcileStatefulset(p *myctrl.StageParam, label map
 
 		// 更新
 		for i, container := range sts.Spec.Template.Spec.Containers {
-			if container.Name == mysql.Name {
+			switch container.Name {
+			case mysql.Name:
+				// 更新mysql资源配置
 				sts.Spec.Template.Spec.Containers[i].Resources = mysql.Resources
-				break
+			case xtrabackup.Name:
+				// 更新半同步配置
+				sts.Spec.Template.Spec.Containers[i].Env = xtrabackup.Env
 			}
 		}
 		return nil
@@ -203,10 +209,14 @@ func createInitContainer() *corev1.Container {
 	}
 }
 
-func createSidecarContainer(p *myctrl.StageParam, masterPVCName string) *corev1.Container {
+func createSidecarContainer(p *myctrl.StageParam, masterPVCName string, semisync *int32) *corev1.Container {
 	// root密码 主从复制账号密码
 	env := myctrl.EnvSecretRef(myctrl.ResourceName(p.Cr.Name, myctrl.Secret),
 		[]string{myctrl.EnvMysqlRootPassword, myctrl.EnvMysqlMasterDumpUser, myctrl.EnvMysqlMasterDumpPassword})
+	env = append(env, corev1.EnvVar{
+		Name:  myctrl.EnvSemisync,
+		Value: strconv.Itoa(int(*semisync)),
+	})
 
 	cpu := resource.MustParse(myctrl.XtrabackupCpu)
 	mem := resource.MustParse(myctrl.XtrabackupMem)

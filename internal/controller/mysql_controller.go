@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -80,6 +81,9 @@ func (r *MySQLReconciler) Reconcile(ctx context.Context, req ctrl.Request) (resu
 	if err := r.Get(ctx, req.NamespacedName, cr); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
+
+	crjson, _ := json.Marshal(*cr)
+	logger.Info("mysql reconsile start", "cr", string(crjson))
 
 	// 执行具体逻辑
 	p := &StageParam{

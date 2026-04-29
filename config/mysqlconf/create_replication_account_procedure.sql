@@ -2,11 +2,13 @@ USE mysql;
 
 delimiter //
 
--- username      主从复制账号名称
--- userpassword  主从复制账号密码
-CREATE PROCEDURE IF NOT EXISTS CreateDumpUser(IN username VARCHAR(512), IN userpassword VARCHAR(512))
+-- username       主从复制账号名称
+-- userpassword   主从复制账号密码
+-- enablesemisync 0: 不启动半同步
+CREATE PROCEDURE IF NOT EXISTS CreateDumpUser(IN username VARCHAR(512), IN userpassword VARCHAR(512), IN enablesemisync INT(11))
 BEGIN
     DECLARE user_exists INT;
+    DECLARE semi_sync_source_active INT;
 
     SELECT COUNT(*) INTO user_exists FROM mysql.user WHERE user = username;
     
@@ -30,6 +32,19 @@ BEGIN
     ELSE
         SELECT CONCAT('user:', username, ' already exists') AS message;
     END IF;
+
+    IF enablesemisync > 0 THEN 
+        -- 启动半同步, 配置半同步需等待的从节点数量
+        -- https://dev.mysql.com/doc/refman/8.4/en/replication-semisync-installation.html
+        SET GLOBAL rpl_semi_sync_source_enabled = 1;
+        SET @set_global_semi_cnt = CONCAT('SET GLOBAL rpl_semi_sync_source_wait_for_replica_count = ', enablesemisync);
+        PREPARE set_global_semi_cnt_stmt FROM @set_global_semi_cnt;
+        EXECUTE set_global_semi_cnt_stmt;
+        DEALLOCATE PREPARE set_global_semi_cnt_stmt;
+    ELSE 
+        SET GLOBAL rpl_semi_sync_source_enabled = 0;
+    END IF;
+
 END // 
 
 DELIMITER ;

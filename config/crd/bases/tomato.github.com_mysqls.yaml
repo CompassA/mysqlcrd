@@ -58,6 +58,12 @@ spec:
                   rootPassword:
                     description: mysql root密码
                     type: string
+                  semisync:
+                    description: 半同步节点数
+                    format: int32
+                    maximum: 100
+                    minimum: 1
+                    type: integer
                 required:
                 - replicaAccount
                 - replicaPassword
@@ -96,6 +102,7 @@ spec:
             - cpu
             - master
             - memory
+            - replica
             - storage
             type: object
           status:

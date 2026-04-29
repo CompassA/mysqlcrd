@@ -6,12 +6,14 @@ delimiter //
 -- username           主从复制账号名称
 -- userpassword       主从复制账号密码
 -- executed_gtid_set  xtrabackup中获取的已执行的gtid集合
-CREATE PROCEDURE IF NOT EXISTS StartReplication(IN source_host VARCHAR(4096),IN username VARCHAR(512),IN userpassword VARCHAR(512),IN executed_gtid_set VARCHAR(1024))
+-- enablesemisync     0: 未启动半同步; 其余: 启动了半同步
+CREATE PROCEDURE IF NOT EXISTS StartReplication(IN source_host VARCHAR(4096),IN username VARCHAR(512),IN userpassword VARCHAR(512),IN executed_gtid_set VARCHAR(1024), IN enablesemisync INT(11))
 BEGIN
     DECLARE config_cnt INT;
     DECLARE replica_io_running VARCHAR(32);
     DECLARE cur_host VARCHAR(4096);
     DECLARE replica_sql_running VARCHAR(32);
+    DECLARE semi_sync_replica_active INT;
     
     -- 查询是否执行过 change replication source
     -- https://dev.mysql.com/doc/refman/8.4/en/performance-schema-replication-connection-configuration-table.html
@@ -68,6 +70,20 @@ BEGIN
         SELECT 'replica already started' AS message;
     END IF;
     
+    -- 从库半同步配置
+    IF enablesemisync > 0 THEN
+        -- 启动从库半同步配置
+        SET GLOBAL rpl_semi_sync_replica_enabled = 1;
+        STOP REPLICA IO_THREAD;
+        START REPLICA IO_THREAD;
+        SELECT 'replica semisync started' AS message;
+    ELSE 
+        SET GLOBAL rpl_semi_sync_replica_enabled = 0;
+        STOP REPLICA IO_THREAD;
+        START REPLICA IO_THREAD;
+        SELECT 'replica semisync stopped' AS message;
+    END IF; 
+
     show replica status;
 END // 
 
